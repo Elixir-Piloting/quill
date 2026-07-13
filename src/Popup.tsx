@@ -56,7 +56,7 @@ function Popup() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-popover text-popover-foreground">
+    <div className="flex h-screen flex-col bg-popover text-popover-foreground" style={{ fontFamily: "Architects Daughter, sans-serif", letterSpacing: "0.5px" }}>
       <input
         ref={inputRef}
         autoFocus
@@ -64,7 +64,7 @@ function Popup() {
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleKey}
         placeholder="Search snippets..."
-        className="mx-3 mt-3 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none ring-ring focus:ring-2"
+        className="mx-3 mt-3 rounded-lg border border-border bg-card px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground outline-none ring-ring focus:ring-2"
       />
       <div className="flex-1 overflow-y-auto py-2">
         {filtered.length === 0 && (
@@ -72,19 +72,23 @@ function Popup() {
             {snippets.length === 0 ? "No snippets yet" : "No matches"}
           </p>
         )}
-        {filtered.map((s, i) => (
-          <button
-            key={s.id}
-            className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground ${
-              i === selectedIdx ? "bg-accent text-accent-foreground" : "text-popover-foreground"
-            }`}
-            onClick={() => select(i)}
-            onMouseEnter={() => setSelectedIdx(i)}
-          >
-            <span className="font-mono text-xs font-medium text-primary">{s.trigger}</span>
-            <span className="truncate text-xs text-muted-foreground">{s.expansion}</span>
-          </button>
-        ))}
+        <div className="mx-3 space-y-0.5">
+          {filtered.map((s, i) => (
+            <button
+              key={s.id}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                i === selectedIdx
+                  ? "bg-card text-card-foreground shadow-xs"
+                  : "hover:bg-card/60 text-popover-foreground"
+              }`}
+              onClick={() => select(i)}
+              onMouseEnter={() => setSelectedIdx(i)}
+            >
+              <span className="font-mono text-xs font-medium text-primary">{s.trigger}</span>
+              <span className="truncate text-xs text-muted-foreground">{s.expansion}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

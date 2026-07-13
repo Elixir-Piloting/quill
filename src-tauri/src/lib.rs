@@ -111,7 +111,7 @@ fn close_and_inject(expansion: String, state: tauri::State<'_, Arc<AppState>>, a
     if let Some(popup) = app.get_webview_window("search") {
         let _ = popup.hide();
     }
-    std::thread::sleep(std::time::Duration::from_millis(100));
+    std::thread::sleep(std::time::Duration::from_millis(300));
     injection::inject_text(&expansion, &state.inner());
     if let Some(popup) = app.get_webview_window("search") {
         let _ = popup.close();
@@ -305,8 +305,10 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let _ = window.hide();
-                api.prevent_close();
+                if window.label() == "main" {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
