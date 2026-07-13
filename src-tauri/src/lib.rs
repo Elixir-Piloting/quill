@@ -158,11 +158,12 @@ fn submit_form_injection(
 ) -> Result<(), String> {
     let pending = state.pending_form.lock().map_err(|e| e.to_string())?.take();
     if let Some(data) = pending {
+        let casing = injection::detect_casing(&data.typed_trigger, &data.trigger);
         if let Some(popup) = app.get_webview_window("form") {
             let _ = popup.hide();
         }
         std::thread::sleep(std::time::Duration::from_millis(300));
-        injection::inject_form_text(&data.expansion, &values, state.inner());
+        injection::inject_form_text_with_casing(&data.expansion, &values, state.inner(), casing);
         if let Some(popup) = app.get_webview_window("form") {
             let _ = popup.close();
         }

@@ -4,6 +4,7 @@ use crate::db;
 
 pub struct PendingFormData {
     pub trigger: String,
+    pub typed_trigger: String,
     pub expansion: String,
     pub fields: Vec<db::FormInput>,
 }

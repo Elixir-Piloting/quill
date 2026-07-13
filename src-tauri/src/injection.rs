@@ -9,6 +9,49 @@ use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 use crate::db;
 use crate::state::AppState;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CasingMode {
+    Lower,
+    Upper,
+    Capital,
+    Mixed,
+}
+
+pub fn detect_casing(typed_trigger: &str, stored_trigger: &str) -> CasingMode {
+    if !stored_trigger.chars().any(|c| c.is_alphabetic()) {
+        return CasingMode::Lower;
+    }
+    if typed_trigger.chars().all(|c| !c.is_alphabetic() || c.is_lowercase()) {
+        return CasingMode::Lower;
+    }
+    if typed_trigger.chars().all(|c| !c.is_alphabetic() || c.is_uppercase()) {
+        return CasingMode::Upper;
+    }
+    if let Some(first) = typed_trigger.chars().next() {
+        if first.is_uppercase() {
+            let rest: String = typed_trigger.chars().skip(1).collect();
+            if rest.chars().all(|c| !c.is_alphabetic() || c.is_lowercase()) {
+                return CasingMode::Capital;
+            }
+        }
+    }
+    CasingMode::Mixed
+}
+
+fn apply_casing(text: &str, mode: CasingMode) -> String {
+    match mode {
+        CasingMode::Lower | CasingMode::Mixed => text.to_string(),
+        CasingMode::Upper => text.to_uppercase(),
+        CasingMode::Capital => {
+            let mut chars = text.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().to_string() + chars.as_str(),
+            }
+        }
+    }
+}
+
 fn clipboard_paste(text: &str, state: &AppState, cursor_left: Option<usize>) {
     let mut enigo = match Enigo::new(&Settings::default()) {
         Ok(e) => e,
@@ -84,6 +127,10 @@ fn process_cursor(text: &str, conn: &rusqlite::Connection) -> (String, Option<us
 
 /// Inject text at the current cursor position (no backspace).
 pub fn inject_text(expansion: &str, state: &AppState) {
+    inject_text_with_casing(expansion, state, CasingMode::Lower)
+}
+
+pub fn inject_text_with_casing(expansion: &str, state: &AppState, casing: CasingMode) {
     state.injecting.store(true, Ordering::SeqCst);
     std::thread::sleep(Duration::from_millis(20));
 
@@ -92,7 +139,8 @@ pub fn inject_text(expansion: &str, state: &AppState) {
         process_cursor(expansion, &conn)
     };
 
-    clipboard_paste(&processed.0, state, processed.1);
+    let final_text = apply_casing(&processed.0, casing);
+    clipboard_paste(&final_text, state, processed.1);
     state.injecting.store(false, Ordering::SeqCst);
 }
 
@@ -120,6 +168,10 @@ pub fn backspace_text(trigger: &str, state: &AppState) {
 
 /// Replace trigger with expansion (backspace + paste).
 pub fn replace_text(trigger: &str, expansion: &str, state: &AppState) {
+    replace_text_with_casing(trigger, expansion, state, CasingMode::Lower)
+}
+
+pub fn replace_text_with_casing(trigger: &str, expansion: &str, state: &AppState, casing: CasingMode) {
     state.injecting.store(true, Ordering::SeqCst);
     std::thread::sleep(Duration::from_millis(20));
 
@@ -142,7 +194,8 @@ pub fn replace_text(trigger: &str, expansion: &str, state: &AppState) {
     let (processed, cursor_left) = process_cursor(expansion, &conn);
     drop(conn);
 
-    clipboard_paste(&processed, state, cursor_left);
+    let final_text = apply_casing(&processed, casing);
+    clipboard_paste(&final_text, state, cursor_left);
     state.injecting.store(false, Ordering::SeqCst);
 }
 
@@ -152,6 +205,15 @@ pub fn inject_form_text(
     expansion: &str,
     form_values: &HashMap<String, String>,
     state: &AppState,
+) {
+    inject_form_text_with_casing(expansion, form_values, state, CasingMode::Lower)
+}
+
+pub fn inject_form_text_with_casing(
+    expansion: &str,
+    form_values: &HashMap<String, String>,
+    state: &AppState,
+    casing: CasingMode,
 ) {
     state.injecting.store(true, Ordering::SeqCst);
     std::thread::sleep(Duration::from_millis(20));
@@ -168,6 +230,7 @@ pub fn inject_form_text(
         process_cursor(&resolved, &conn)
     };
 
-    clipboard_paste(&processed.0, state, processed.1);
+    let final_text = apply_casing(&processed.0, casing);
+    clipboard_paste(&final_text, state, processed.1);
     state.injecting.store(false, Ordering::SeqCst);
 }

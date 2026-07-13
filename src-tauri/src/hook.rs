@@ -49,9 +49,13 @@ pub fn start_hook(state: Arc<AppState>) {
 
                 for (_snippet_id, trigger, expansion, whole_word) in &triggers {
                     if matches_trigger(&current, trigger, *whole_word) {
+                        let typed_trigger: String = current.chars().rev().take(trigger.len()).collect::<Vec<_>>().into_iter().rev().collect();
+
                         if let Ok(mut buf) = state.buffer.lock() {
                             buf.clear();
                         }
+
+                        let casing = injection::detect_casing(&typed_trigger, trigger);
 
                         // Check if expansion references any form inputs
                         let has_form = match state.db.lock() {
@@ -69,6 +73,7 @@ pub fn start_hook(state: Arc<AppState>) {
                                     if let Ok(mut pf) = state.pending_form.lock() {
                                         *pf = Some(crate::state::PendingFormData {
                                             trigger: trigger.clone(),
+                                            typed_trigger: typed_trigger.clone(),
                                             expansion: expansion.clone(),
                                             fields: referenced,
                                         });
@@ -87,7 +92,7 @@ pub fn start_hook(state: Arc<AppState>) {
                                 open_form_popup(handle);
                             }
                         } else {
-                            injection::replace_text(trigger, expansion, &state);
+                            injection::replace_text_with_casing(trigger, expansion, &state, casing);
                         }
                         break;
                     }
@@ -118,7 +123,12 @@ fn open_form_popup(app: &tauri::AppHandle) {
 }
 
 fn matches_trigger(buffer: &str, trigger: &str, whole_word: bool) -> bool {
-    if !buffer.ends_with(trigger) {
+    if buffer.len() < trigger.len() {
+        return false;
+    }
+
+    let typed_trigger = &buffer[buffer.len() - trigger.len()..];
+    if !typed_trigger.eq_ignore_ascii_case(trigger) {
         return false;
     }
 
