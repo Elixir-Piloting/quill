@@ -8,6 +8,7 @@ import Popup from "./Popup";
 import Titlebar from "./components/Titlebar";
 import SettingsModal from "./components/SettingsModal";
 import MainPage from "./pages/MainPage";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 function App() {
   return (
@@ -134,7 +135,9 @@ function AppShell() {
     <div className="flex h-screen flex-col">
       <Titlebar paused={paused} closeToTray={closeToTray} onTogglePause={togglePause} onOpenSettings={() => setSettingsDlg(true)} />
 
-      <MainPage snippets={snippets} variables={variables} onRefreshSnippets={loadSnippets} onRefreshVariables={loadVariables} />
+      <ScrollArea className="flex-1 min-h-0">
+        <MainPage snippets={snippets} variables={variables} onRefreshSnippets={loadSnippets} onRefreshVariables={loadVariables} />
+      </ScrollArea>
 
       <SettingsModal
         open={settingsDlg}

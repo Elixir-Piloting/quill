@@ -40,11 +40,7 @@ fn clipboard_paste(text: &str, state: &AppState, cursor_left: Option<usize>) {
 
     if let Some(offset) = cursor_left {
         if offset > 0 {
-            for _ in 0..offset {
-                let _ = enigo.key(Key::LeftArrow, Direction::Click);
-                if state.cancelling.load(Ordering::Relaxed) { break; }
-            }
-            std::thread::sleep(Duration::from_millis(30));
+            crate::uia::try_set_cursor(offset);
         }
     }
 }

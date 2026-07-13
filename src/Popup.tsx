@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Snippet {
   id: number;
@@ -57,22 +58,26 @@ function Popup() {
 
   return (
     <div className="flex h-screen flex-col bg-popover text-popover-foreground" style={{ fontFamily: "Architects Daughter, sans-serif", letterSpacing: "0.5px" }}>
-      <input
-        ref={inputRef}
-        autoFocus
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={handleKey}
-        placeholder="Search snippets..."
-        className="mx-3 mt-3 rounded-lg border border-border bg-card px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground outline-none ring-ring focus:ring-2"
-      />
-      <div className="flex-1 overflow-y-auto py-2">
+      <div className="flex shrink-0 items-center gap-2 px-3 py-2.5">
+        <img src="/quill-icon.png" alt="" className="size-4 shrink-0 opacity-50" />
+        <input
+          ref={inputRef}
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder="Search snippets..."
+          className="flex-1 bg-transparent text-sm text-card-foreground placeholder:text-muted-foreground outline-none"
+        />
+      </div>
+      <div className="h-px shrink-0 bg-border/50" />
+      <ScrollArea className="flex-1 min-h-0">
         {filtered.length === 0 && (
           <p className="px-4 py-6 text-center text-xs text-muted-foreground">
             {snippets.length === 0 ? "No snippets yet" : "No matches"}
           </p>
         )}
-        <div className="mx-3 space-y-0.5">
+        <div className="mx-3 space-y-0.5 py-1.5">
           {filtered.map((s, i) => (
             <button
               key={s.id}
@@ -89,7 +94,7 @@ function Popup() {
             </button>
           ))}
         </div>
-      </div>
+      </ScrollArea>
     </div>
   );
 }

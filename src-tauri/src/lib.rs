@@ -3,6 +3,7 @@ mod hook;
 mod injection;
 mod state;
 mod tray;
+mod uia;
 
 use std::sync::{atomic::Ordering, Arc};
 

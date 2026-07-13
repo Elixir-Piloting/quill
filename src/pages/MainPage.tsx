@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+
 import {
   Dialog,
   DialogContent,
@@ -248,21 +249,19 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
 
   return (
     <>
-      <div className="mx-auto flex max-w-3xl flex-1 flex-col overflow-hidden p-6">
-        <div className="mb-4 flex shrink-0 items-center justify-between">
-          <div className="flex gap-1">
-            <Button variant={tab === "snippets" ? "default" : "outline"} size="sm" onClick={() => setTab("snippets")}>Snippets</Button>
-            <Button variant={tab === "variables" ? "default" : "outline"} size="sm" onClick={() => setTab("variables")}>Variables</Button>
+      <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
+          <div className="flex shrink-0 items-center justify-between">
+            <div className="flex gap-1">
+              <Button variant={tab === "snippets" ? "default" : "outline"} size="sm" onClick={() => setTab("snippets")}>Snippets</Button>
+              <Button variant={tab === "variables" ? "default" : "outline"} size="sm" onClick={() => setTab("variables")}>Variables</Button>
+            </div>
+            <Button size="sm" onClick={tab === "snippets" ? openNewSnippet : openNewVariable}>
+              <PlusIcon data-icon="start" />
+              Add {tab === "snippets" ? "Snippet" : "Variable"}
+            </Button>
           </div>
-          <Button size="sm" onClick={tab === "snippets" ? openNewSnippet : openNewVariable}>
-            <PlusIcon data-icon="start" />
-            Add {tab === "snippets" ? "Snippet" : "Variable"}
-          </Button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto min-h-0">
           {tab === "snippets" ? (
-            <Card>
+            <Card className="h-fit">
               <CardContent>
                 {snippets.length === 0 ? (
                   <p className="py-4 text-sm text-muted-foreground">No snippets yet.</p>
@@ -298,7 +297,7 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
               </CardContent>
             </Card>
           ) : (
-            <Card>
+            <Card className="h-fit">
               <CardContent>
                 {variables.length === 0 ? (
                   <p className="py-4 text-sm text-muted-foreground">No variables yet.</p>
@@ -337,7 +336,6 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
             </Card>
           )}
         </div>
-      </div>
 
       {/* ═══ Snippet dialog ═══ */}
       <Dialog open={snippetDlg} onOpenChange={setSnippetDlg}>

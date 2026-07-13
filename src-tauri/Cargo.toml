@@ -25,3 +25,4 @@ tauri-plugin-updater = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
 windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.59", features = ["Win32_UI_Accessibility", "Win32_System_Com"] }
