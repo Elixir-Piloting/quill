@@ -43,7 +43,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { PlusIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { PlusIcon, PencilIcon, Trash2Icon, Settings } from "lucide-react";
 
 // ── Types ──
 
@@ -131,6 +131,14 @@ function App() {
   const [expansion, setExpansion] = useState("");
   const expansionRef = useRef<HTMLTextAreaElement>(null);
 
+  // Settings
+  const [settingsDlg, setSettingsDlg] = useState(false);
+  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() => {
+    const stored = localStorage.getItem('quill-theme');
+    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
+    return 'system';
+  });
+
   // Variables
   const [variables, setVariables] = useState<Variable[]>([]);
   const [variableDlg, setVariableDlg] = useState(false);
@@ -148,6 +156,25 @@ function App() {
     const unlisten = listen<boolean>("paused-changed", (e) => setPaused(e.payload));
     return () => { unlisten.then((f) => f()); };
   }, []);
+
+  // Theme
+  useEffect(() => {
+    const root = document.documentElement;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => {
+      if (theme === 'light') { root.classList.remove('dark'); }
+      else if (theme === 'dark') { root.classList.add('dark'); }
+      else if (mq.matches) { root.classList.add('dark'); }
+      else { root.classList.remove('dark'); }
+    };
+    apply();
+    localStorage.setItem('quill-theme', theme);
+    if (theme === 'system') {
+      const handler = () => apply();
+      mq.addEventListener('change', handler);
+      return () => mq.removeEventListener('change', handler);
+    }
+  }, [theme]);
 
   // ── Snippets ──
 
@@ -270,9 +297,14 @@ function App() {
       {/* ═══ Header ═══ */}
       <header className="flex items-center justify-between">
         <h1 className="font-heading text-xl font-semibold">Quill</h1>
-        <Button variant={paused ? "secondary" : "default"} onClick={togglePause}>
-          {paused ? "Paused" : "Active"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant={paused ? "secondary" : "default"} onClick={togglePause}>
+            {paused ? "Paused" : "Active"}
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => setSettingsDlg(true)}>
+            <Settings />
+          </Button>
+        </div>
       </header>
 
       {/* ═══ Snippet list ═══ */}
@@ -410,6 +442,26 @@ function App() {
           )}
         </CardContent>
       </Card>
+
+      {/* ═══ Settings dialog ═══ */}
+      <Dialog open={settingsDlg} onOpenChange={setSettingsDlg}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Settings</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-4">
+            <label className="text-xs font-medium text-muted-foreground">Theme</label>
+            <div className="flex gap-2">
+              <Button variant={theme === 'system' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('system')}>System</Button>
+              <Button variant={theme === 'light' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('light')}>Light</Button>
+              <Button variant={theme === 'dark' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('dark')}>Dark</Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ═══ Variable dialog ═══ */}
       <Dialog open={variableDlg} onOpenChange={setVariableDlg}>
