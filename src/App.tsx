@@ -28,6 +28,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -35,7 +43,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, PencilIcon, Trash2Icon } from "lucide-react";
 
 // ── Types ──
 
@@ -117,6 +125,7 @@ function App() {
 
   // Snippets
   const [snippets, setSnippets] = useState<Snippet[]>([]);
+  const [snippetDlg, setSnippetDlg] = useState(false);
   const [editingSnip, setEditingSnip] = useState<Snippet | null>(null);
   const [trigger, setTrigger] = useState("");
   const [expansion, setExpansion] = useState("");
@@ -124,6 +133,7 @@ function App() {
 
   // Variables
   const [variables, setVariables] = useState<Variable[]>([]);
+  const [variableDlg, setVariableDlg] = useState(false);
   const [editingVar, setEditingVar] = useState<Variable | null>(null);
   const [varName, setVarName] = useState("");
   const [varKind, setVarKind] = useState<VarKind>("text");
@@ -139,15 +149,24 @@ function App() {
     return () => { unlisten.then((f) => f()); };
   }, []);
 
-  // Snippets
+  // ── Snippets ──
+
   async function loadSnippets() {
     setSnippets(await invoke<Snippet[]>("get_snippets"));
   }
 
-  function resetSnippetForm() {
+  function openNewSnippet() {
     setEditingSnip(null);
     setTrigger("");
     setExpansion("");
+    setSnippetDlg(true);
+  }
+
+  function openEditSnippet(s: Snippet) {
+    setEditingSnip(s);
+    setTrigger(s.trigger);
+    setExpansion(s.expansion);
+    setSnippetDlg(true);
   }
 
   async function saveSnippet() {
@@ -157,14 +176,8 @@ function App() {
     } else {
       await invoke("add_snippet", { trigger: trigger.trim(), expansion: expansion.trim() });
     }
-    resetSnippetForm();
+    setSnippetDlg(false);
     loadSnippets();
-  }
-
-  function editSnippet(s: Snippet) {
-    setEditingSnip(s);
-    setTrigger(s.trigger);
-    setExpansion(s.expansion);
   }
 
   async function deleteSnippet(id: number) {
@@ -185,17 +198,33 @@ function App() {
     });
   }
 
-  // Variables
+  // ── Variables ──
+
   async function loadVariables() {
     setVariables(await invoke<Variable[]>("get_variables"));
   }
 
-  function resetVarForm() {
+  function openNewVariable() {
     setEditingVar(null);
     setVarName("");
     setVarKind("text");
     setVarValue("");
     setVarDateFmt("");
+    setVariableDlg(true);
+  }
+
+  function openEditVariable(v: Variable) {
+    setEditingVar(v);
+    setVarName(v.name);
+    setVarKind(v.kind as VarKind);
+    if (v.kind === "date") {
+      setVarDateFmt(v.value);
+      setVarValue("");
+    } else {
+      setVarValue(v.value);
+      setVarDateFmt("");
+    }
+    setVariableDlg(true);
   }
 
   async function saveVariable() {
@@ -207,21 +236,8 @@ function App() {
     } else {
       await invoke("add_variable", payload);
     }
-    resetVarForm();
+    setVariableDlg(false);
     loadVariables();
-  }
-
-  function editVariable(v: Variable) {
-    setEditingVar(v);
-    setVarName(v.name);
-    setVarKind(v.kind as VarKind);
-    if (v.kind === "date") {
-      setVarDateFmt(v.value);
-      setVarValue("");
-    } else {
-      setVarValue(v.value);
-      setVarDateFmt("");
-    }
   }
 
   async function deleteVariable(id: number) {
@@ -229,12 +245,14 @@ function App() {
     loadVariables();
   }
 
-  // Pause
+  // ── Pause ──
+
   async function togglePause() {
     setPaused(await invoke<boolean>("toggle_paused"));
   }
 
-  // Helpers
+  // ── Helpers ──
+
   function varDisplay(v: Variable): string {
     if (v.kind === "clipboard") return "Clipboard contents";
     if (v.kind === "date") return previewDate(v.value);
@@ -257,54 +275,14 @@ function App() {
         </Button>
       </header>
 
-      {/* ═══ Snippet editor ═══ */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{editingSnip ? "Edit Snippet" : "Add Snippet"}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={(e) => { e.preventDefault(); saveSnippet(); }} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="trigger" className="text-xs font-medium text-muted-foreground">Trigger</label>
-              <Input id="trigger" value={trigger} onChange={(e) => setTrigger(e.target.value)} placeholder="e.g. ;addr" autoFocus />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <label htmlFor="expansion" className="text-xs font-medium text-muted-foreground">Expansion</label>
-                <DropdownMenu>
-                  <DropdownMenuTrigger render={<Button variant="outline" size="xs" />}>
-                    <PlusIcon data-icon="inline-start" />
-                    Insert Variable
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="min-w-56">
-                    <DropdownMenuGroup>
-                      {variables.length === 0 && (
-                        <div className="px-3 py-2 text-xs text-muted-foreground">No variables defined</div>
-                      )}
-                      {variables.map((v) => (
-                        <DropdownMenuItem key={v.id} onClick={() => insertVariable(v.name)}>
-                          <span className="font-mono text-xs">{`{${v.name}}`}</span>
-                          <span className="truncate text-xs text-muted-foreground">{varDisplay(v)}</span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              <Textarea id="expansion" ref={expansionRef} value={expansion} onChange={(e) => setExpansion(e.target.value)} placeholder="e.g. 123 Main St" rows={4} />
-            </div>
-            <div className="flex gap-2">
-              <Button type="submit">{editingSnip ? "Update" : "Add"}</Button>
-              {editingSnip && <Button type="button" variant="outline" onClick={resetSnippetForm}>Cancel</Button>}
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
       {/* ═══ Snippet list ═══ */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between">
           <CardTitle>Snippets</CardTitle>
+          <Button size="xs" onClick={openNewSnippet}>
+            <PlusIcon data-icon="start" />
+            Add Snippet
+          </Button>
         </CardHeader>
         <CardContent>
           {snippets.length === 0 ? (
@@ -325,8 +303,12 @@ function App() {
                     <TableCell className="max-w-72 truncate text-muted-foreground">{truncate(s.expansion, 60)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="outline" size="xs" onClick={() => editSnippet(s)}>Edit</Button>
-                        <Button variant="destructive" size="xs" onClick={() => deleteSnippet(s.id)}>Delete</Button>
+                        <Button variant="outline" size="xs" onClick={() => openEditSnippet(s)}>
+                          <PencilIcon />Edit
+                        </Button>
+                        <Button variant="destructive" size="xs" onClick={() => deleteSnippet(s.id)}>
+                          <Trash2Icon />Delete
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -337,83 +319,60 @@ function App() {
         </CardContent>
       </Card>
 
-      {/* ═══ Variable editor ═══ */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{editingVar ? "Edit Variable" : "Add Variable"}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={(e) => { e.preventDefault(); saveVariable(); }} className="flex flex-col gap-4">
-            <div className="flex gap-3">
-              <div className="flex flex-1 flex-col gap-1.5">
-                <label htmlFor="var-name" className="text-xs font-medium text-muted-foreground">Name</label>
-                <Input id="var-name" value={varName} onChange={(e) => setVarName(e.target.value)} placeholder="e.g. signature" />
+      {/* ═══ Snippet dialog ═══ */}
+      <Dialog open={snippetDlg} onOpenChange={setSnippetDlg}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={(e) => { e.preventDefault(); saveSnippet(); }}>
+            <DialogHeader>
+              <DialogTitle>{editingSnip ? "Edit Snippet" : "Add Snippet"}</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 py-4">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="trigger" className="text-xs font-medium text-muted-foreground">Trigger</label>
+                <Input id="trigger" value={trigger} onChange={(e) => setTrigger(e.target.value)} placeholder="e.g. ;addr" autoFocus />
               </div>
-              <div className="flex w-40 flex-col gap-1.5">
-                <label htmlFor="var-kind" className="text-xs font-medium text-muted-foreground">Type</label>
-                <Select value={varKind} onValueChange={(v) => { if (v) setVarKind(v as VarKind); setVarDateFmt(""); setVarValue(""); }}>
-                  <SelectTrigger id="var-kind">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="text">Text</SelectItem>
-                      <SelectItem value="date">Date &amp; Time</SelectItem>
-                      <SelectItem value="clipboard">Clipboard</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="expansion" className="text-xs font-medium text-muted-foreground">Expansion</label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger render={<Button variant="outline" size="xs" />}>
+                      <PlusIcon data-icon="start" />
+                      Insert Variable
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-56">
+                      <DropdownMenuGroup>
+                        {variables.length === 0 && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">No variables defined</div>
+                        )}
+                        {variables.map((v) => (
+                          <DropdownMenuItem key={v.id} onClick={() => insertVariable(v.name)}>
+                            <span className="font-mono text-xs">{`{${v.name}}`}</span>
+                            <span className="truncate text-xs text-muted-foreground">{varDisplay(v)}</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <Textarea id="expansion" ref={expansionRef} value={expansion} onChange={(e) => setExpansion(e.target.value)} placeholder="e.g. 123 Main St" rows={4} />
               </div>
             </div>
-
-            {varKind === "text" && (
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="var-value" className="text-xs font-medium text-muted-foreground">Value</label>
-                <Textarea id="var-value" value={varValue} onChange={(e) => setVarValue(e.target.value)} placeholder="e.g. Best regards,\nJohn" rows={3} />
-              </div>
-            )}
-
-            {varKind === "date" && (
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="var-date-fmt" className="text-xs font-medium text-muted-foreground">Date format</label>
-                <Select value={varDateFmt} onValueChange={(v) => { if (v) setVarDateFmt(v); }}>
-                  <SelectTrigger id="var-date-fmt">
-                    <SelectValue placeholder="Select a format…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {DATE_FORMATS.map((f) => (
-                        <SelectItem key={f.pattern} value={f.pattern}>{previewDate(f.pattern)}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                {varDateFmt && (
-                  <p className="text-xs text-muted-foreground">Preview: {previewDate(varDateFmt)}</p>
-                )}
-              </div>
-            )}
-
-            {varKind === "clipboard" && (
-              <p className="text-xs text-muted-foreground">This variable will be replaced by the current clipboard contents when expanded.</p>
-            )}
-
-            {varKind === "text" && varValue && (
-              <p className="text-xs text-muted-foreground">Use the <strong>Insert Variable</strong> button in the snippet editor to add this variable.</p>
-            )}
-
-            <div className="flex gap-2">
-              <Button type="submit">{editingVar ? "Update" : "Add"}</Button>
-              {editingVar && <Button type="button" variant="outline" onClick={resetVarForm}>Cancel</Button>}
-            </div>
+            <DialogFooter>
+              <Button type="submit">{editingSnip ? "Update" : "Add"}</Button>
+              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            </DialogFooter>
           </form>
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
 
       {/* ═══ Variable list ═══ */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between">
           <CardTitle>Variables</CardTitle>
+          <Button size="xs" onClick={openNewVariable}>
+            <PlusIcon data-icon="start" />
+            Add Variable
+          </Button>
         </CardHeader>
         <CardContent>
           {variables.length === 0 ? (
@@ -436,8 +395,12 @@ function App() {
                     <TableCell className="max-w-56 truncate text-muted-foreground">{varDisplay(v)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="outline" size="xs" onClick={() => editVariable(v)}>Edit</Button>
-                        <Button variant="destructive" size="xs" onClick={() => deleteVariable(v.id)}>Delete</Button>
+                        <Button variant="outline" size="xs" onClick={() => openEditVariable(v)}>
+                          <PencilIcon />Edit
+                        </Button>
+                        <Button variant="destructive" size="xs" onClick={() => deleteVariable(v.id)}>
+                          <Trash2Icon />Delete
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -447,6 +410,80 @@ function App() {
           )}
         </CardContent>
       </Card>
+
+      {/* ═══ Variable dialog ═══ */}
+      <Dialog open={variableDlg} onOpenChange={setVariableDlg}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={(e) => { e.preventDefault(); saveVariable(); }}>
+            <DialogHeader>
+              <DialogTitle>{editingVar ? "Edit Variable" : "Add Variable"}</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 py-4">
+              <div className="flex gap-3">
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <label htmlFor="var-name" className="text-xs font-medium text-muted-foreground">Name</label>
+                  <Input id="var-name" value={varName} onChange={(e) => setVarName(e.target.value)} placeholder="e.g. signature" autoFocus />
+                </div>
+                <div className="flex w-40 flex-col gap-1.5">
+                  <label htmlFor="var-kind" className="text-xs font-medium text-muted-foreground">Type</label>
+                  <Select value={varKind} onValueChange={(v) => { if (v) setVarKind(v as VarKind); setVarDateFmt(""); setVarValue(""); }}>
+                    <SelectTrigger id="var-kind">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="text">Text</SelectItem>
+                        <SelectItem value="date">Date &amp; Time</SelectItem>
+                        <SelectItem value="clipboard">Clipboard</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {varKind === "text" && (
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="var-value" className="text-xs font-medium text-muted-foreground">Value</label>
+                  <Textarea id="var-value" value={varValue} onChange={(e) => setVarValue(e.target.value)} placeholder="e.g. Best regards,\nJohn" rows={3} />
+                </div>
+              )}
+
+              {varKind === "date" && (
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="var-date-fmt" className="text-xs font-medium text-muted-foreground">Date format</label>
+                  <Select value={varDateFmt} onValueChange={(v) => { if (v) setVarDateFmt(v); }}>
+                    <SelectTrigger id="var-date-fmt">
+                      <SelectValue placeholder="Select a format…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {DATE_FORMATS.map((f) => (
+                          <SelectItem key={f.pattern} value={f.pattern}>{previewDate(f.pattern)}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  {varDateFmt && (
+                    <p className="text-xs text-muted-foreground">Preview: {previewDate(varDateFmt)}</p>
+                  )}
+                </div>
+              )}
+
+              {varKind === "clipboard" && (
+                <p className="text-xs text-muted-foreground">This variable will be replaced by the current clipboard contents when expanded.</p>
+              )}
+
+              {varKind === "text" && varValue && (
+                <p className="text-xs text-muted-foreground">Use the <strong>Insert Variable</strong> button in the snippet editor to add this variable.</p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="submit">{editingVar ? "Update" : "Add"}</Button>
+              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
