@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
@@ -81,8 +82,7 @@ fn process_cursor(text: &str, conn: &rusqlite::Connection) -> (String, Option<us
     }
 }
 
-/// Injects text at the current cursor position (no backspace).
-/// Handles {cursor} marker and variable resolution.
+/// Inject text at the current cursor position (no backspace).
 pub fn inject_text(expansion: &str, state: &AppState) {
     state.injecting.store(true, Ordering::SeqCst);
     std::thread::sleep(Duration::from_millis(20));
@@ -96,8 +96,29 @@ pub fn inject_text(expansion: &str, state: &AppState) {
     state.injecting.store(false, Ordering::SeqCst);
 }
 
-/// Replaces trigger with expansion (backspace + paste).
-/// Handles {cursor} marker, whole_word flag, and variable resolution.
+/// Backspace over trigger text (used before opening form popup).
+pub fn backspace_text(trigger: &str, state: &AppState) {
+    state.injecting.store(true, Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(20));
+
+    let mut enigo = match Enigo::new(&Settings::default()) {
+        Ok(e) => e,
+        Err(_) => {
+            state.injecting.store(false, Ordering::SeqCst);
+            return;
+        }
+    };
+
+    for _ in 0..trigger.chars().count() {
+        let _ = enigo.key(Key::Backspace, Direction::Click);
+        std::thread::sleep(Duration::from_millis(18));
+    }
+
+    std::thread::sleep(Duration::from_millis(60));
+    state.injecting.store(false, Ordering::SeqCst);
+}
+
+/// Replace trigger with expansion (backspace + paste).
 pub fn replace_text(trigger: &str, expansion: &str, state: &AppState) {
     state.injecting.store(true, Ordering::SeqCst);
     std::thread::sleep(Duration::from_millis(20));
@@ -122,5 +143,31 @@ pub fn replace_text(trigger: &str, expansion: &str, state: &AppState) {
     drop(conn);
 
     clipboard_paste(&processed, state, cursor_left);
+    state.injecting.store(false, Ordering::SeqCst);
+}
+
+/// Resolve form variable placeholders with user-provided values,
+/// then process remaining variables and inject.
+pub fn inject_form_text(
+    expansion: &str,
+    form_values: &HashMap<String, String>,
+    state: &AppState,
+) {
+    state.injecting.store(true, Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(20));
+
+    // Replace form input placeholders with user values first
+    let mut resolved = expansion.to_string();
+    for (name, value) in form_values {
+        let placeholder = format!("{{{}}}", name);
+        resolved = resolved.replace(&placeholder, value);
+    }
+
+    let processed = {
+        let conn = state.db.lock().unwrap();
+        process_cursor(&resolved, &conn)
+    };
+
+    clipboard_paste(&processed.0, state, processed.1);
     state.injecting.store(false, Ordering::SeqCst);
 }

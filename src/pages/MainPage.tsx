@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-
 import {
   Dialog,
   DialogContent,
@@ -40,6 +39,23 @@ import {
 import { PlusIcon, PencilIcon, Trash2Icon } from "lucide-react";
 
 import type { Snippet, Variable, VarKind } from "../App";
+
+interface FormInput {
+  id: number;
+  name: string;
+  label: string;
+  placeholder: string;
+  default_value: string;
+  required: boolean;
+  created_at: string;
+}
+
+function slug(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+}
 
 // ── Date format helpers ──
 
@@ -111,7 +127,8 @@ interface Props {
 // ── Main page ──
 
 function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }: Props) {
-  const [tab, setTab] = useState<"snippets" | "variables">("snippets");
+  const [tab, setTab] = useState<"snippets" | "variables" | "forms">("snippets");
+  const [formInputs, setFormInputs] = useState<FormInput[]>([]);
 
   // Snippet dialog
   const [snippetDlg, setSnippetDlg] = useState(false);
@@ -120,6 +137,16 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
   const [expansion, setExpansion] = useState("");
   const [wholeWord, setWholeWord] = useState(true);
   const expansionRef = useRef<HTMLTextAreaElement>(null);
+
+  // Form input dialog
+  const [formDlg, setFormDlg] = useState(false);
+  const [editingForm, setEditingForm] = useState<FormInput | null>(null);
+  const [formName, setFormName] = useState("");
+  const [formLabel, setFormLabel] = useState("");
+  const [formPlaceholder, setFormPlaceholder] = useState("");
+  const [formDefault, setFormDefault] = useState("");
+  const [formRequired, setFormRequired] = useState(true);
+  const formNameTouched = useRef(false);
 
   // Variable dialog
   const [variableDlg, setVariableDlg] = useState(false);
@@ -131,7 +158,20 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
 
   // Confirm dialog
   const [confirmDlg, setConfirmDlg] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<{ type: "snippet" | "variable"; id: number; label: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ type: "snippet" | "variable" | "form"; id: number; label: string } | null>(null);
+
+  // ── Load form inputs on mount for snippet editor dropdown ──
+
+  useEffect(() => { loadFormInputs(); }, []);
+
+  async function loadFormInputs() {
+    try {
+      const fi = await invoke<FormInput[]>("get_form_inputs");
+      setFormInputs(fi);
+    } catch {
+      setFormInputs([]);
+    }
+  }
 
   // ── Snippet CRUD ──
 
@@ -141,6 +181,7 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     setExpansion("");
     setWholeWord(true);
     setSnippetDlg(true);
+    loadFormInputs();
   }
 
   function openEditSnippet(s: Snippet) {
@@ -149,6 +190,7 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     setExpansion(s.expansion);
     setWholeWord(s.whole_word);
     setSnippetDlg(true);
+    loadFormInputs();
   }
 
   async function saveSnippet() {
@@ -173,6 +215,52 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
       ta.focus();
       ta.setSelectionRange(start + placeholder.length, start + placeholder.length);
     });
+  }
+
+  // ── Form Input CRUD ──
+
+  function openNewForm() {
+    setEditingForm(null);
+    setFormName("");
+    setFormLabel("");
+    setFormPlaceholder("");
+    setFormDefault("");
+    setFormRequired(true);
+    formNameTouched.current = false;
+    setFormDlg(true);
+  }
+
+  function openEditForm(f: FormInput) {
+    setEditingForm(f);
+    setFormName(f.name);
+    setFormLabel(f.label);
+    setFormPlaceholder(f.placeholder);
+    setFormDefault(f.default_value);
+    setFormRequired(f.required);
+    setFormDlg(true);
+  }
+
+  async function saveForm() {
+    if (!formName.trim()) return;
+    const payload = {
+      name: formName.trim(),
+      label: formLabel.trim() || formName.trim(),
+      placeholder: formPlaceholder.trim(),
+      defaultValue: formDefault.trim(),
+      required: formRequired,
+    };
+    if (editingForm) {
+      await invoke("update_form_input", { id: editingForm.id, ...payload });
+    } else {
+      await invoke("add_form_input", payload);
+    }
+    setFormDlg(false);
+    loadFormInputs();
+  }
+
+  function requestDeleteForm(id: number, label: string) {
+    setPendingDelete({ type: "form", id, label });
+    setConfirmDlg(true);
   }
 
   // ── Variable CRUD ──
@@ -225,9 +313,12 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     if (pendingDelete.type === "snippet") {
       await invoke("delete_snippet", { id: pendingDelete.id });
       onRefreshSnippets();
-    } else {
+    } else if (pendingDelete.type === "variable") {
       await invoke("delete_variable", { id: pendingDelete.id });
       onRefreshVariables();
+    } else if (pendingDelete.type === "form") {
+      await invoke("delete_form_input", { id: pendingDelete.id });
+      loadFormInputs();
     }
     setConfirmDlg(false);
     setPendingDelete(null);
@@ -254,10 +345,15 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
             <div className="flex gap-1">
               <Button variant={tab === "snippets" ? "default" : "outline"} size="sm" onClick={() => setTab("snippets")}>Snippets</Button>
               <Button variant={tab === "variables" ? "default" : "outline"} size="sm" onClick={() => setTab("variables")}>Variables</Button>
+              <Button variant={tab === "forms" ? "default" : "outline"} size="sm" onClick={() => { setTab("forms"); loadFormInputs(); }}>Form Inputs</Button>
             </div>
-            <Button size="sm" onClick={tab === "snippets" ? openNewSnippet : openNewVariable}>
+            <Button size="sm" onClick={
+              tab === "snippets" ? openNewSnippet :
+              tab === "variables" ? openNewVariable :
+              openNewForm
+            }>
               <PlusIcon data-icon="start" />
-              Add {tab === "snippets" ? "Snippet" : "Variable"}
+              Add {tab === "snippets" ? "Snippet" : tab === "variables" ? "Variable" : "Form Input"}
             </Button>
           </div>
           {tab === "snippets" ? (
@@ -296,7 +392,7 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
                 )}
               </CardContent>
             </Card>
-          ) : (
+          ) : tab === "variables" ? (
             <Card className="h-fit">
               <CardContent>
                 {variables.length === 0 ? (
@@ -323,6 +419,44 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
                                 <PencilIcon />Edit
                               </Button>
                               <Button variant="destructive" size="xs" onClick={() => requestDelete("variable", v.id, `{${v.name}}`)}>
+                                <Trash2Icon />Delete
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="h-fit">
+              <CardContent>
+                {formInputs.length === 0 ? (
+                  <p className="py-4 text-sm text-muted-foreground">No form inputs yet.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Label</TableHead>
+                        <TableHead>Required</TableHead>
+                        <TableHead className="w-0 text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {formInputs.map((f) => (
+                        <TableRow key={f.id}>
+                          <TableCell className="font-mono text-xs">{`{${f.name}}`}</TableCell>
+                          <TableCell className="text-muted-foreground">{f.label}</TableCell>
+                          <TableCell>{f.required ? <Badge>Yes</Badge> : <Badge variant="secondary">No</Badge>}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="outline" size="xs" onClick={() => openEditForm(f)}>
+                                <PencilIcon />Edit
+                              </Button>
+                              <Button variant="destructive" size="xs" onClick={() => requestDeleteForm(f.id, f.label)}>
                                 <Trash2Icon />Delete
                               </Button>
                             </div>
@@ -364,8 +498,17 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
                       </DropdownMenuItem>
                       <div className="mx-2 my-1 h-px bg-border" />
                       <DropdownMenuGroup>
-                        {variables.length === 0 && (
-                          <div className="px-3 py-2 text-xs text-muted-foreground">No variables defined</div>
+                        {variables.length === 0 && formInputs.length === 0 && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">No variables or form inputs defined</div>
+                        )}
+                        {formInputs.map((f) => (
+                          <DropdownMenuItem key={`form-${f.id}`} onClick={() => insertVariable(f.name)}>
+                            <span className="font-mono text-xs">{`{${f.name}}`}</span>
+                            <span className="truncate text-xs text-muted-foreground">{f.label}</span>
+                          </DropdownMenuItem>
+                        ))}
+                        {formInputs.length > 0 && variables.length > 0 && (
+                          <div className="mx-2 my-1 h-px bg-border" />
                         )}
                         {variables.map((v) => (
                           <DropdownMenuItem key={v.id} onClick={() => insertVariable(v.name)}>
@@ -389,6 +532,52 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
             </div>
             <DialogFooter>
               <Button type="submit">{editingSnip ? "Update" : "Add"}</Button>
+              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Form Input dialog ═══ */}
+      <Dialog open={formDlg} onOpenChange={setFormDlg}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={(e) => { e.preventDefault(); saveForm(); }}>
+            <DialogHeader>
+              <DialogTitle>{editingForm ? "Edit Form Input" : "Add Form Input"}</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 py-4">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="form-label" className="text-xs font-medium text-muted-foreground">Label</label>
+                <Input
+                  id="form-label"
+                  value={formLabel}
+                  onChange={(e) => { setFormLabel(e.target.value); if (!editingForm && !formNameTouched.current) setFormName(slug(e.target.value)); }}
+                  placeholder="e.g. Client name?"
+                  autoFocus
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="form-name" className="text-xs font-medium text-muted-foreground">Variable name</label>
+                <Input id="form-name" value={formName} onChange={(e) => { formNameTouched.current = true; setFormName(e.target.value); }} placeholder="auto-generated from label" />
+                <span className="text-xs text-muted-foreground">Use <code className="font-mono text-primary">{`{${formName || 'name'}}`}</code> in snippet expansion</span>
+              </div>
+              <div className="flex gap-2">
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <label htmlFor="form-placeholder" className="text-xs font-medium text-muted-foreground">Placeholder (optional)</label>
+                  <Input id="form-placeholder" value={formPlaceholder} onChange={(e) => setFormPlaceholder(e.target.value)} placeholder="e.g. John Doe" />
+                </div>
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <label htmlFor="form-default" className="text-xs font-medium text-muted-foreground">Default value (optional)</label>
+                  <Input id="form-default" value={formDefault} onChange={(e) => setFormDefault(e.target.value)} placeholder="e.g. John" />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" checked={formRequired} onChange={(e) => setFormRequired(e.target.checked)} className="size-3.5 accent-primary" />
+                Required
+              </label>
+            </div>
+            <DialogFooter>
+              <Button type="submit">{editingForm ? "Update" : "Add"}</Button>
               <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
             </DialogFooter>
           </form>
@@ -467,7 +656,7 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
       <Dialog open={confirmDlg} onOpenChange={(open) => { if (!open) { setConfirmDlg(false); setPendingDelete(null); } }}>
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
-            <DialogTitle>Delete {pendingDelete?.type === "snippet" ? "snippet" : "variable"}?</DialogTitle>
+            <DialogTitle>Delete {pendingDelete?.type === "snippet" ? "snippet" : pendingDelete?.type === "form" ? "form input" : "variable"}?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             Are you sure you want to delete <strong>{pendingDelete?.label}</strong>? This cannot be undone.

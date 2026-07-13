@@ -1,5 +1,5 @@
 use rusqlite::{params, Connection, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Clone)]
 pub struct Snippet {
@@ -16,6 +16,17 @@ pub struct Variable {
     pub name: String,
     pub value: String,
     pub kind: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FormInput {
+    pub id: i64,
+    pub name: String,
+    pub label: String,
+    pub placeholder: String,
+    pub default_value: String,
+    pub required: bool,
     pub created_at: String,
 }
 
@@ -39,6 +50,15 @@ pub fn init_db(db_path: &str) -> Result<Connection> {
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS form_inputs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            label TEXT NOT NULL,
+            placeholder TEXT NOT NULL DEFAULT '',
+            default_value TEXT NOT NULL DEFAULT '',
+            required INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );",
     )?;
     let _ = conn.execute_batch(
@@ -87,14 +107,15 @@ pub fn delete_snippet(conn: &Connection, id: i64) -> Result<()> {
     Ok(())
 }
 
-pub fn get_all_triggers(conn: &Connection) -> Result<Vec<(String, String, bool)>> {
-    let mut stmt = conn.prepare("SELECT trigger, expansion, whole_word FROM snippets")?;
+pub fn get_all_triggers(conn: &Connection) -> Result<Vec<(i64, String, String, bool)>> {
+    let mut stmt = conn.prepare("SELECT id, trigger, expansion, whole_word FROM snippets")?;
     let triggers = stmt
         .query_map([], |row| {
             Ok((
-                row.get::<_, String>(0)?,
+                row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
-                row.get::<_, i64>(2)? != 0,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)? != 0,
             ))
         })?
         .collect::<Result<Vec<_>>>()?;
@@ -147,6 +168,50 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
          INSERT OR IGNORE INTO variables (name, value, kind) VALUES ('clipboard', '', 'clipboard');
          INSERT OR IGNORE INTO settings (key, value) VALUES ('hotkey', 'Alt+Space');",
     )?;
+    Ok(())
+}
+
+// ── Form Inputs ──
+
+pub fn get_all_form_inputs(conn: &Connection) -> Result<Vec<FormInput>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, label, placeholder, default_value, required, created_at
+         FROM form_inputs ORDER BY created_at DESC",
+    )?;
+    let fields = stmt
+        .query_map([], |row| {
+            Ok(FormInput {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                label: row.get(2)?,
+                placeholder: row.get(3)?,
+                default_value: row.get(4)?,
+                required: row.get::<_, i64>(5)? != 0,
+                created_at: row.get(6)?,
+            })
+        })?
+        .collect::<Result<Vec<_>>>()?;
+    Ok(fields)
+}
+
+pub fn add_form_input(conn: &Connection, name: &str, label: &str, placeholder: &str, default_value: &str, required: bool) -> Result<()> {
+    conn.execute(
+        "INSERT INTO form_inputs (name, label, placeholder, default_value, required) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![name, label, placeholder, default_value, required as i64],
+    )?;
+    Ok(())
+}
+
+pub fn update_form_input(conn: &Connection, id: i64, name: &str, label: &str, placeholder: &str, default_value: &str, required: bool) -> Result<()> {
+    conn.execute(
+        "UPDATE form_inputs SET name = ?1, label = ?2, placeholder = ?3, default_value = ?4, required = ?5 WHERE id = ?6",
+        params![name, label, placeholder, default_value, required as i64, id],
+    )?;
+    Ok(())
+}
+
+pub fn delete_form_input(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM form_inputs WHERE id = ?1", params![id])?;
     Ok(())
 }
 

@@ -5,12 +5,13 @@ mod state;
 mod tray;
 mod uia;
 
-use std::sync::{atomic::Ordering, Arc};
+use std::collections::HashMap;
+use std::sync::{atomic::Ordering, Arc, Mutex};
 
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
-use db::{Snippet, Variable};
+use db::{FormInput, Snippet, Variable};
 use state::AppState;
 
 // ── Snippet commands ──
@@ -91,6 +92,89 @@ fn delete_variable(
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     db::delete_variable(&conn, id).map_err(|e| e.to_string())
+}
+
+// ── Form Input commands ──
+
+#[tauri::command]
+fn get_form_inputs(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<FormInput>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::get_all_form_inputs(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn add_form_input(
+    state: tauri::State<'_, Arc<AppState>>,
+    name: String,
+    label: String,
+    placeholder: String,
+    default_value: String,
+    required: bool,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::add_form_input(&conn, &name, &label, &placeholder, &default_value, required).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn update_form_input(
+    state: tauri::State<'_, Arc<AppState>>,
+    id: i64,
+    name: String,
+    label: String,
+    placeholder: String,
+    default_value: String,
+    required: bool,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::update_form_input(&conn, id, &name, &label, &placeholder, &default_value, required).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_form_input(
+    state: tauri::State<'_, Arc<AppState>>,
+    id: i64,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::delete_form_input(&conn, id).map_err(|e| e.to_string())
+}
+
+// ── Pending form commands ──
+
+#[tauri::command]
+fn get_pending_form(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Option<(String, String, Vec<FormInput>)>, String> {
+    let pf = state.pending_form.lock().map_err(|e| e.to_string())?;
+    Ok(pf.as_ref().map(|f| (f.trigger.clone(), f.expansion.clone(), f.fields.clone())))
+}
+
+#[tauri::command]
+fn submit_form_injection(
+    state: tauri::State<'_, Arc<AppState>>,
+    values: HashMap<String, String>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let pending = state.pending_form.lock().map_err(|e| e.to_string())?.take();
+    if let Some(data) = pending {
+        if let Some(popup) = app.get_webview_window("form") {
+            let _ = popup.hide();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        injection::inject_form_text(&data.expansion, &values, state.inner());
+        if let Some(popup) = app.get_webview_window("form") {
+            let _ = popup.close();
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn cancel_form_injection(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let mut pending = state.pending_form.lock().map_err(|e| e.to_string())?;
+    *pending = None;
+    Ok(())
 }
 
 // ── State commands ──
@@ -216,45 +300,13 @@ fn parse_hotkey(s: &str) -> Result<Shortcut, String> {
             "enter" | "return" => code = Some(Code::Enter),
             "escape" | "esc" => code = Some(Code::Escape),
             "tab" => code = Some(Code::Tab),
-            "a" => code = Some(Code::KeyA),
-            "b" => code = Some(Code::KeyB),
-            "c" => code = Some(Code::KeyC),
-            "d" => code = Some(Code::KeyD),
-            "e" => code = Some(Code::KeyE),
-            "f" => code = Some(Code::KeyF),
-            "g" => code = Some(Code::KeyG),
-            "h" => code = Some(Code::KeyH),
-            "i" => code = Some(Code::KeyI),
-            "j" => code = Some(Code::KeyJ),
-            "k" => code = Some(Code::KeyK),
-            "l" => code = Some(Code::KeyL),
-            "m" => code = Some(Code::KeyM),
-            "n" => code = Some(Code::KeyN),
-            "o" => code = Some(Code::KeyO),
-            "p" => code = Some(Code::KeyP),
-            "q" => code = Some(Code::KeyQ),
-            "r" => code = Some(Code::KeyR),
-            "s" => code = Some(Code::KeyS),
-            "t" => code = Some(Code::KeyT),
-            "u" => code = Some(Code::KeyU),
-            "v" => code = Some(Code::KeyV),
-            "w" => code = Some(Code::KeyW),
-            "x" => code = Some(Code::KeyX),
-            "y" => code = Some(Code::KeyY),
-            "z" => code = Some(Code::KeyZ),
-            "f1" => code = Some(Code::F1),
-            "f2" => code = Some(Code::F2),
-            "f3" => code = Some(Code::F3),
-            "f4" => code = Some(Code::F4),
-            "f5" => code = Some(Code::F5),
-            "f6" => code = Some(Code::F6),
-            "f7" => code = Some(Code::F7),
-            "f8" => code = Some(Code::F8),
-            "f9" => code = Some(Code::F9),
-            "f10" => code = Some(Code::F10),
-            "f11" => code = Some(Code::F11),
-            "f12" => code = Some(Code::F12),
-            _ => return Err(format!("Unknown key: {}", part)),
+            other => {
+                let is_valid = other.len() == 1 && other.chars().all(|c| c.is_ascii_lowercase())
+                    || other.len() > 1 && other.starts_with('f') && other[1..].chars().all(|c| c.is_ascii_digit());
+                if !is_valid {
+                    return Err(format!("Unknown key: {}", part));
+                }
+            }
         }
     }
 
@@ -284,11 +336,13 @@ pub fn run() {
             db::seed_defaults(&conn).expect("failed to seed defaults");
 
             let app_state = Arc::new(AppState {
-                db: std::sync::Mutex::new(conn),
-                buffer: std::sync::Mutex::new(String::new()),
+                db: Mutex::new(conn),
+                buffer: Mutex::new(String::new()),
                 paused: std::sync::atomic::AtomicBool::new(false),
                 injecting: std::sync::atomic::AtomicBool::new(false),
                 cancelling: std::sync::atomic::AtomicBool::new(false),
+                pending_form: Mutex::new(None),
+                app_handle: Mutex::new(Some(app.handle().clone())),
             });
 
             let _ = tray::setup_tray(app.handle(), app_state.clone());
@@ -329,6 +383,13 @@ pub fn run() {
             add_variable,
             update_variable,
             delete_variable,
+            get_form_inputs,
+            add_form_input,
+            update_form_input,
+            delete_form_input,
+            get_pending_form,
+            submit_form_injection,
+            cancel_form_injection,
             toggle_paused,
             get_paused,
             close_and_inject,

@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isEnabled as autoStartIsEnabled, enable as autoStartEnable, disable as autoStartDisable } from "@tauri-apps/plugin-autostart";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import Popup from "./Popup";
+import FormPopup from "./FormPopup";
 import Titlebar from "./components/Titlebar";
 import SettingsModal from "./components/SettingsModal";
 import MainPage from "./pages/MainPage";
@@ -72,6 +73,7 @@ function AppShell() {
   // Popup redirect
   try {
     const win = getCurrentWindow();
+    if (win.label === "form") return <FormPopup />;
     if (win.label !== "main") return <Popup />;
   } catch {}
 

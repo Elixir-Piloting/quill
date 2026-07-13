@@ -4,6 +4,7 @@ use std::sync::{
 };
 
 use rdev::{listen, Event, EventType};
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::{db, injection, state::AppState};
 
@@ -46,12 +47,44 @@ pub fn start_hook(state: Arc<AppState>) {
                     Err(_) => return,
                 };
 
-                for (trigger, expansion, whole_word) in &triggers {
+                for (_snippet_id, trigger, expansion, whole_word) in &triggers {
                     if matches_trigger(&current, trigger, *whole_word) {
                         if let Ok(mut buf) = state.buffer.lock() {
                             buf.clear();
                         }
-                        injection::replace_text(trigger, expansion, &state);
+
+                        // Check if expansion references any form inputs
+                        let has_form = match state.db.lock() {
+                            Ok(conn) => {
+                                let form_inputs = db::get_all_form_inputs(&conn).unwrap_or_default();
+                                let referenced: Vec<_> = form_inputs
+                                    .into_iter()
+                                    .filter(|f| expansion.contains(&format!("{{{}}}", f.name)))
+                                    .collect();
+                                if !referenced.is_empty() {
+                                    if let Ok(mut pf) = state.pending_form.lock() {
+                                        *pf = Some(crate::state::PendingFormData {
+                                            trigger: trigger.clone(),
+                                            expansion: expansion.clone(),
+                                            fields: referenced,
+                                        });
+                                    }
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                            Err(_) => false,
+                        };
+
+                        if has_form {
+                            injection::backspace_text(trigger, &state);
+                            if let Some(handle) = state.app_handle.lock().unwrap().as_ref() {
+                                open_form_popup(handle);
+                            }
+                        } else {
+                            injection::replace_text(trigger, expansion, &state);
+                        }
                         break;
                     }
                 }
@@ -60,6 +93,24 @@ pub fn start_hook(state: Arc<AppState>) {
             _ => {}
         }
     });
+}
+
+fn open_form_popup(app: &tauri::AppHandle) {
+    if let Some(popup) = app.get_webview_window("form") {
+        let _ = popup.show();
+        let _ = popup.set_focus();
+    } else {
+        if let Ok(popup) = WebviewWindowBuilder::new(app, "form", WebviewUrl::App("index.html".into()))
+            .decorations(false)
+            .always_on_top(true)
+            .inner_size(440.0, 320.0)
+            .center()
+            .title("Quill")
+            .build()
+        {
+            let _ = popup.set_focus();
+        }
+    }
 }
 
 fn matches_trigger(buffer: &str, trigger: &str, whole_word: bool) -> bool {
