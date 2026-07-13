@@ -6,7 +6,7 @@ use std::sync::{
 use rdev::{listen, Event, EventType};
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
-use crate::{db, injection, state::AppState};
+use crate::{db, injection, process, state::AppState};
 
 const MAX_BUFFER_SIZE: usize = 30;
 
@@ -47,54 +47,77 @@ pub fn start_hook(state: Arc<AppState>) {
                     Err(_) => return,
                 };
 
-                for (_snippet_id, trigger, expansion, whole_word) in &triggers {
-                    if matches_trigger(&current, trigger, *whole_word) {
-                        let typed_trigger: String = current.chars().rev().take(trigger.len()).collect::<Vec<_>>().into_iter().rev().collect();
+                let foreground_exe = process::get_foreground_exe();
 
-                        if let Ok(mut buf) = state.buffer.lock() {
-                            buf.clear();
-                        }
+                let mut matched_idx: Option<usize> = None;
+                for (i, (_sid, trigger, _expansion, whole_word, app_scope)) in triggers.iter().enumerate() {
+                    if !matches_trigger(&current, trigger, *whole_word) {
+                        continue;
+                    }
 
-                        let casing = injection::detect_casing(&typed_trigger, trigger);
+                    let is_global = app_scope == "[]" || app_scope.is_empty();
+                    let scope_allowed = if is_global {
+                        true
+                    } else {
+                        foreground_exe.as_ref().map_or(false, |exe| {
+                            serde_json::from_str::<Vec<db::AppScopeEntry>>(app_scope)
+                                .ok()
+                                .map_or(false, |entries| entries.iter().any(|e| e.exe == *exe))
+                        })
+                    };
 
-                        // Check if expansion references any form inputs
-                        let has_form = match state.db.lock() {
-                            Ok(conn) => {
-                                let form_inputs = db::get_all_form_inputs(&conn).unwrap_or_default();
-                                let referenced = {
-                                    let mut v: Vec<_> = form_inputs
-                                        .into_iter()
-                                        .filter(|f| expansion.contains(&format!("{{{}}}", f.name)))
-                                        .collect();
-                                    v.sort_by_key(|f| expansion.find(&format!("{{{}}}", f.name)).unwrap_or(usize::MAX));
-                                    v
-                                };
-                                if !referenced.is_empty() {
-                                    if let Ok(mut pf) = state.pending_form.lock() {
-                                        *pf = Some(crate::state::PendingFormData {
-                                            trigger: trigger.clone(),
-                                            typed_trigger: typed_trigger.clone(),
-                                            expansion: expansion.clone(),
-                                            fields: referenced,
-                                        });
-                                    }
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-                            Err(_) => false,
-                        };
-
-                        if has_form {
-                            injection::backspace_text(trigger, &state);
-                            if let Some(handle) = state.app_handle.lock().unwrap().as_ref() {
-                                open_form_popup(handle);
-                            }
-                        } else {
-                            injection::replace_text_with_casing(trigger, expansion, &state, casing);
-                        }
+                    if scope_allowed {
+                        matched_idx = Some(i);
                         break;
+                    }
+                }
+
+                if let Some(idx) = matched_idx {
+                    let (_sid, trigger, expansion, _whole_word, _app_scope) = &triggers[idx];
+                    let typed_trigger: String = current.chars().rev().take(trigger.len()).collect::<Vec<_>>().into_iter().rev().collect();
+
+                    if let Ok(mut buf) = state.buffer.lock() {
+                        buf.clear();
+                    }
+
+                    let casing = injection::detect_casing(&typed_trigger, trigger);
+
+                    // Check if expansion references any form inputs
+                    let has_form = match state.db.lock() {
+                        Ok(conn) => {
+                            let form_inputs = db::get_all_form_inputs(&conn).unwrap_or_default();
+                            let referenced = {
+                                let mut v: Vec<_> = form_inputs
+                                    .into_iter()
+                                    .filter(|f| expansion.contains(&format!("{{{}}}", f.name)))
+                                    .collect();
+                                v.sort_by_key(|f| expansion.find(&format!("{{{}}}", f.name)).unwrap_or(usize::MAX));
+                                v
+                            };
+                            if !referenced.is_empty() {
+                                if let Ok(mut pf) = state.pending_form.lock() {
+                                    *pf = Some(crate::state::PendingFormData {
+                                        trigger: trigger.clone(),
+                                        typed_trigger: typed_trigger.clone(),
+                                        expansion: expansion.clone(),
+                                        fields: referenced,
+                                    });
+                                }
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        Err(_) => false,
+                    };
+
+                    if has_form {
+                        injection::backspace_text(trigger, &state);
+                        if let Some(handle) = state.app_handle.lock().unwrap().as_ref() {
+                            open_form_popup(handle);
+                        }
+                    } else {
+                        injection::replace_text_with_casing(trigger, expansion, &state, casing);
                     }
                 }
             }

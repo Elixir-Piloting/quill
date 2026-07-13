@@ -1,12 +1,19 @@
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AppScopeEntry {
+    pub name: String,
+    pub exe: String,
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct Snippet {
     pub id: i64,
     pub trigger: String,
     pub expansion: String,
     pub whole_word: bool,
+    pub app_scope: String,
     pub created_at: String,
 }
 
@@ -69,6 +76,9 @@ pub fn init_db(db_path: &str) -> Result<Connection> {
     let _ = conn.execute_batch(
         "ALTER TABLE form_inputs ADD COLUMN field_type TEXT NOT NULL DEFAULT 'text';",
     );
+    let _ = conn.execute_batch(
+        "ALTER TABLE snippets ADD COLUMN app_scope TEXT NOT NULL DEFAULT '[]';",
+    );
     Ok(conn)
 }
 
@@ -76,7 +86,7 @@ pub fn init_db(db_path: &str) -> Result<Connection> {
 
 pub fn get_all_snippets(conn: &Connection) -> Result<Vec<Snippet>> {
     let mut stmt =
-        conn.prepare("SELECT id, trigger, expansion, whole_word, created_at FROM snippets ORDER BY created_at DESC")?;
+        conn.prepare("SELECT id, trigger, expansion, whole_word, app_scope, created_at FROM snippets ORDER BY created_at DESC")?;
     let snippets = stmt
         .query_map([], |row| {
             Ok(Snippet {
@@ -84,25 +94,26 @@ pub fn get_all_snippets(conn: &Connection) -> Result<Vec<Snippet>> {
                 trigger: row.get(1)?,
                 expansion: row.get(2)?,
                 whole_word: row.get::<_, i64>(3)? != 0,
-                created_at: row.get(4)?,
+                app_scope: row.get(4)?,
+                created_at: row.get(5)?,
             })
         })?
         .collect::<Result<Vec<_>>>()?;
     Ok(snippets)
 }
 
-pub fn add_snippet(conn: &Connection, trigger: &str, expansion: &str, whole_word: bool) -> Result<()> {
+pub fn add_snippet(conn: &Connection, trigger: &str, expansion: &str, whole_word: bool, app_scope: &str) -> Result<()> {
     conn.execute(
-        "INSERT INTO snippets (trigger, expansion, whole_word) VALUES (?1, ?2, ?3)",
-        params![trigger, expansion, whole_word as i64],
+        "INSERT INTO snippets (trigger, expansion, whole_word, app_scope) VALUES (?1, ?2, ?3, ?4)",
+        params![trigger, expansion, whole_word as i64, app_scope],
     )?;
     Ok(())
 }
 
-pub fn update_snippet(conn: &Connection, id: i64, trigger: &str, expansion: &str, whole_word: bool) -> Result<()> {
+pub fn update_snippet(conn: &Connection, id: i64, trigger: &str, expansion: &str, whole_word: bool, app_scope: &str) -> Result<()> {
     conn.execute(
-        "UPDATE snippets SET trigger = ?1, expansion = ?2, whole_word = ?3 WHERE id = ?4",
-        params![trigger, expansion, whole_word as i64, id],
+        "UPDATE snippets SET trigger = ?1, expansion = ?2, whole_word = ?3, app_scope = ?4 WHERE id = ?5",
+        params![trigger, expansion, whole_word as i64, app_scope, id],
     )?;
     Ok(())
 }
@@ -112,8 +123,8 @@ pub fn delete_snippet(conn: &Connection, id: i64) -> Result<()> {
     Ok(())
 }
 
-pub fn get_all_triggers(conn: &Connection) -> Result<Vec<(i64, String, String, bool)>> {
-    let mut stmt = conn.prepare("SELECT id, trigger, expansion, whole_word FROM snippets")?;
+pub fn get_all_triggers(conn: &Connection) -> Result<Vec<(i64, String, String, bool, String)>> {
+    let mut stmt = conn.prepare("SELECT id, trigger, expansion, whole_word, app_scope FROM snippets")?;
     let triggers = stmt
         .query_map([], |row| {
             Ok((
@@ -121,6 +132,7 @@ pub fn get_all_triggers(conn: &Connection) -> Result<Vec<(i64, String, String, b
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, i64>(3)? != 0,
+                row.get::<_, String>(4)?,
             ))
         })?
         .collect::<Result<Vec<_>>>()?;

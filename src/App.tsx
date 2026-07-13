@@ -28,6 +28,7 @@ export interface Snippet {
   trigger: string;
   expansion: string;
   whole_word: boolean;
+  app_scope: string;
   created_at: string;
 }
 

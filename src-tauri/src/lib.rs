@@ -1,6 +1,7 @@
 mod db;
 mod hook;
 mod injection;
+mod process;
 mod state;
 mod tray;
 mod uia;
@@ -28,9 +29,10 @@ fn add_snippet(
     trigger: String,
     expansion: String,
     whole_word: bool,
+    app_scope: String,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::add_snippet(&conn, &trigger, &expansion, whole_word).map_err(|e| e.to_string())
+    db::add_snippet(&conn, &trigger, &expansion, whole_word, &app_scope).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -40,9 +42,10 @@ fn update_snippet(
     trigger: String,
     expansion: String,
     whole_word: bool,
+    app_scope: String,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::update_snippet(&conn, id, &trigger, &expansion, whole_word).map_err(|e| e.to_string())
+    db::update_snippet(&conn, id, &trigger, &expansion, whole_word, &app_scope).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -190,6 +193,13 @@ fn toggle_paused(state: tauri::State<'_, Arc<AppState>>) -> bool {
 #[tauri::command]
 fn get_paused(state: tauri::State<'_, Arc<AppState>>) -> bool {
     state.paused.load(Ordering::SeqCst)
+}
+
+// ── App-scope commands ──
+
+#[tauri::command]
+fn get_running_apps() -> Vec<process::AppEntry> {
+    process::get_running_apps()
 }
 
 // ── Popup commands ──
@@ -401,6 +411,7 @@ pub fn run() {
             get_hotkey,
             set_hotkey,
             open_search_popup,
+            get_running_apps,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

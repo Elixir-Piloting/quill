@@ -36,9 +36,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PlusIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { PlusIcon, PencilIcon, Trash2Icon, XIcon, SearchIcon } from "lucide-react";
 
 import type { Snippet, Variable, VarKind } from "../App";
+
+interface RunningApp {
+  name: string;
+  exe: string;
+}
 
 interface FormInput {
   id: number;
@@ -145,6 +150,10 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
   const [trigger, setTrigger] = useState("");
   const [expansion, setExpansion] = useState("");
   const [wholeWord, setWholeWord] = useState(true);
+  const [appScope, setAppScope] = useState<RunningApp[]>([]);
+  const [scopeEnabled, setScopeEnabled] = useState(false);
+  const [runningApps, setRunningApps] = useState<RunningApp[]>([]);
+  const [appSearch, setAppSearch] = useState("");
   const expansionRef = useRef<HTMLTextAreaElement>(null);
 
   // Form input dialog
@@ -198,8 +207,11 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     setTrigger("");
     setExpansion("");
     setWholeWord(true);
+    setAppScope([]);
+    setScopeEnabled(false);
+    setAppSearch("");
+    fetchRunningApps();
     setSnippetDlg(true);
-    loadFormInputs();
   }
 
   function openEditSnippet(s: Snippet) {
@@ -207,16 +219,31 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     setTrigger(s.trigger);
     setExpansion(s.expansion);
     setWholeWord(s.whole_word);
+    const scope: RunningApp[] = (() => {
+      try { return JSON.parse(s.app_scope || "[]"); } catch { return []; }
+    })();
+    setAppScope(scope);
+    setScopeEnabled(scope.length > 0);
+    setAppSearch("");
+    fetchRunningApps();
     setSnippetDlg(true);
     loadFormInputs();
   }
 
+  async function fetchRunningApps() {
+    try {
+      const apps: RunningApp[] = await invoke("get_running_apps");
+      setRunningApps(apps);
+    } catch { setRunningApps([]); }
+  }
+
   async function saveSnippet() {
     if (!trigger.trim() || !expansion.trim()) return;
+    const appScopeStr = JSON.stringify(scopeEnabled ? appScope : []);
     if (editingSnip) {
-      await invoke("update_snippet", { id: editingSnip.id, trigger: trigger.trim(), expansion: expansion.trim(), wholeWord });
+      await invoke("update_snippet", { id: editingSnip.id, trigger: trigger.trim(), expansion: expansion.trim(), wholeWord, appScope: appScopeStr });
     } else {
-      await invoke("add_snippet", { trigger: trigger.trim(), expansion: expansion.trim(), wholeWord });
+      await invoke("add_snippet", { trigger: trigger.trim(), expansion: expansion.trim(), wholeWord, appScope: appScopeStr });
     }
     setSnippetDlg(false);
     onRefreshSnippets();
@@ -551,6 +578,54 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
                   Whole word match only
                 </label>
                 <span className="text-xs text-muted-foreground">Use <code className="font-mono text-primary">{`{cursor}`}</code> to set cursor position</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={scopeEnabled} onChange={(e) => { setScopeEnabled(e.target.checked); if (!e.target.checked) setAppSearch(""); }} className="size-3.5 accent-primary" />
+                  Restrict to specific apps
+                </label>
+                {scopeEnabled && (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-wrap gap-1.5">
+                      {appScope.map((a) => (
+                        <span key={a.exe} className="inline-flex items-center gap-1 rounded bg-primary/15 px-2 py-0.5 text-xs">
+                          {a.name}
+                          <button type="button" onClick={() => setAppScope(appScope.filter((x) => x.exe !== a.exe))} className="hover:text-destructive">
+                            <XIcon className="size-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="relative">
+                      <SearchIcon className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={appSearch}
+                        onChange={(e) => setAppSearch(e.target.value)}
+                        placeholder="Search running apps..."
+                        className="w-full rounded-md border border-input bg-background py-1.5 pl-7 pr-2 text-xs outline-none focus:border-primary"
+                      />
+                    </div>
+                    <div className="max-h-36 overflow-y-auto rounded-md border border-input">
+                      {runningApps
+                        .filter((a) => a.name.toLowerCase().includes(appSearch.toLowerCase()) && !appScope.some((s) => s.exe === a.exe))
+                        .slice(0, 20)
+                        .map((a) => (
+                          <button
+                            key={a.exe}
+                            type="button"
+                            onClick={() => { setAppScope([...appScope, a]); setAppSearch(""); }}
+                            className="w-full px-2 py-1 text-left text-xs hover:bg-accent"
+                          >
+                            {a.name}
+                          </button>
+                        ))}
+                      {runningApps.filter((a) => a.name.toLowerCase().includes(appSearch.toLowerCase()) && !appScope.some((s) => s.exe === a.exe)).length === 0 && (
+                        <div className="px-2 py-1 text-xs text-muted-foreground">No matching apps</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>
