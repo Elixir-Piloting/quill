@@ -6,7 +6,7 @@ mod tray;
 
 use std::sync::{atomic::Ordering, Arc};
 
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Listener, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 use db::{Snippet, Variable};
@@ -292,6 +292,13 @@ pub fn run() {
             if let Ok(shortcut) = parse_hotkey(&hotkey_str) {
                 let _ = app.global_shortcut().register(shortcut);
             }
+
+            let inject_state = app_state.clone();
+            app.listen("popup-inject", move |event| {
+                let expansion = event.payload().trim_matches('"').to_string();
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                injection::inject_text(&expansion, &inject_state);
+            });
 
             app.manage(app_state);
             Ok(())

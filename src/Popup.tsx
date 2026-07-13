@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 interface Snippet {
@@ -19,6 +20,10 @@ function Popup() {
   useEffect(() => {
     invoke<Snippet[]>("get_snippets").then(setSnippets);
     inputRef.current?.focus();
+    const win = getCurrentWindow();
+    function onBlur() { win.close(); }
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
   }, []);
 
   const filtered = snippets.filter((s) => {
@@ -33,7 +38,7 @@ function Popup() {
   async function select(idx: number) {
     const s = filtered[idx];
     if (!s) return;
-    await invoke("inject_from_popup", { expansion: s.expansion });
+    await emit("popup-inject", s.expansion);
     await getCurrentWindow().close();
   }
 

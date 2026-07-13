@@ -688,19 +688,15 @@ function App() {
             {/* Search hotkey */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-muted-foreground">Search popup hotkey</label>
-              <div className="flex items-center gap-2">
-                {recordingHotkey ? (
-                  <div className="flex h-8 flex-1 items-center rounded-md border border-dashed px-3 text-xs text-muted-foreground">
-                    Press a key combination…
-                  </div>
-                ) : (
-                  <div className="flex h-8 flex-1 items-center rounded-md border bg-background px-3 font-mono text-xs">
-                    {hotkey}
-                  </div>
-                )}
-                <Button variant="outline" size="xs" onClick={startRecording} disabled={recordingHotkey}>
-                  {recordingHotkey ? "…" : "Record"}
-                </Button>
+              <div
+                className={`flex h-8 items-center rounded-md border px-3 font-mono text-xs cursor-pointer ${
+                  recordingHotkey
+                    ? "border-dashed text-muted-foreground"
+                    : "bg-background hover:bg-accent"
+                }`}
+                onClick={startRecording}
+              >
+                {recordingHotkey ? "Press a key combination…" : hotkey}
               </div>
             </div>
 
