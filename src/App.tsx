@@ -145,6 +145,15 @@ function App() {
   const [confirmDlg, setConfirmDlg] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{ type: 'snippet' | 'variable'; id: number; label: string } | null>(null);
 
+  // Settings state
+  const [closeToTray, setCloseToTray] = useState(() => localStorage.getItem('quill-close-to-tray') !== 'false');
+  const [runOnBoot, setRunOnBoot] = useState(() => localStorage.getItem('quill-run-on-boot') === 'true');
+  const [bootPriority, setBootPriority] = useState(() => localStorage.getItem('quill-boot-priority') || 'normal');
+
+  useEffect(() => { localStorage.setItem('quill-close-to-tray', String(closeToTray)); }, [closeToTray]);
+  useEffect(() => { localStorage.setItem('quill-run-on-boot', String(runOnBoot)); }, [runOnBoot]);
+  useEffect(() => { localStorage.setItem('quill-boot-priority', bootPriority); }, [bootPriority]);
+
   // Variables
   const [variables, setVariables] = useState<Variable[]>([]);
   const [variableDlg, setVariableDlg] = useState(false);
@@ -194,7 +203,10 @@ function App() {
 
   function minimizeWindow() { appWindow.minimize(); }
   function toggleMaximize() { appWindow.toggleMaximize(); }
-  function closeWindow() { appWindow.close(); }
+  function closeWindow() {
+    if (closeToTray) { appWindow.hide(); }
+    else { appWindow.close(); }
+  }
 
   // ── Snippets ──
 
@@ -329,10 +341,17 @@ function App() {
           <span className="font-heading text-xs font-semibold">Quill</span>
         </div>
         <div className="flex items-center">
-          <Button variant={paused ? "outline" : "default"} size="xs" onClick={togglePause}>
-            <span className={`size-1.5 rounded-full ${paused ? "bg-destructive" : "bg-primary-foreground"}`} />
-            {paused ? "Paused" : "Active"}
-          </Button>
+          {paused ? (
+            <Button variant="outline" size="xs" onClick={togglePause} className="border-destructive text-destructive hover:bg-destructive/10">
+              <span className="size-1.5 rounded-full bg-destructive" />
+              Paused
+            </Button>
+          ) : (
+            <Button variant="default" size="xs" onClick={togglePause}>
+              <span className="size-1.5 rounded-full bg-primary-foreground" />
+              Active
+            </Button>
+          )}
           <Button variant="ghost" size="icon-xs" onClick={() => setSettingsDlg(true)} title="Settings">
             <Settings />
           </Button>
@@ -510,17 +529,54 @@ function App() {
 
       {/* ═══ Settings dialog ═══ */}
       <Dialog open={settingsDlg} onOpenChange={setSettingsDlg}>
-        <DialogContent className="sm:max-w-xs">
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Settings</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-3 py-4">
-            <label className="text-xs font-medium text-muted-foreground">Theme</label>
-            <div className="flex gap-2">
-              <Button variant={theme === 'system' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('system')}>System</Button>
-              <Button variant={theme === 'light' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('light')}>Light</Button>
-              <Button variant={theme === 'dark' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('dark')}>Dark</Button>
+          <div className="flex flex-col gap-5 py-4">
+
+            {/* Theme */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Theme</label>
+              <div className="flex gap-2">
+                <Button variant={theme === 'system' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('system')}>System</Button>
+                <Button variant={theme === 'light' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('light')}>Light</Button>
+                <Button variant={theme === 'dark' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('dark')}>Dark</Button>
+              </div>
             </div>
+
+            {/* Close to system tray */}
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-sm font-medium">Close to tray</span>
+                <span className="text-xs text-muted-foreground">Minimize to tray instead of quitting</span>
+              </div>
+              <Button variant={closeToTray ? 'default' : 'outline'} size="sm" onClick={() => setCloseToTray(!closeToTray)}>
+                {closeToTray ? 'On' : 'Off'}
+              </Button>
+            </div>
+
+            {/* Run on boot */}
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-sm font-medium">Run on boot</span>
+                <span className="text-xs text-muted-foreground">Auto-start Quill when you log in</span>
+              </div>
+              <Button variant={runOnBoot ? 'default' : 'outline'} size="sm" onClick={() => setRunOnBoot(!runOnBoot)}>
+                {runOnBoot ? 'On' : 'Off'}
+              </Button>
+            </div>
+
+            {/* Boot priority */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Boot priority</label>
+              <div className="flex gap-2">
+                <Button variant={bootPriority === 'low' ? 'default' : 'outline'} size="sm" onClick={() => setBootPriority('low')}>Low</Button>
+                <Button variant={bootPriority === 'normal' ? 'default' : 'outline'} size="sm" onClick={() => setBootPriority('normal')}>Normal</Button>
+                <Button variant={bootPriority === 'high' ? 'default' : 'outline'} size="sm" onClick={() => setBootPriority('high')}>High</Button>
+              </div>
+            </div>
+
           </div>
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
