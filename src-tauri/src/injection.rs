@@ -21,16 +21,20 @@ pub fn detect_casing(typed_trigger: &str, stored_trigger: &str) -> CasingMode {
     if !stored_trigger.chars().any(|c| c.is_alphabetic()) {
         return CasingMode::Lower;
     }
-    if typed_trigger.chars().all(|c| !c.is_alphabetic() || c.is_lowercase()) {
+    let letters: String = typed_trigger.chars().filter(|c| c.is_alphabetic()).collect();
+    if letters.is_empty() {
         return CasingMode::Lower;
     }
-    if typed_trigger.chars().all(|c| !c.is_alphabetic() || c.is_uppercase()) {
+    if letters.chars().all(|c| c.is_lowercase()) {
+        return CasingMode::Lower;
+    }
+    if letters.chars().all(|c| c.is_uppercase()) {
         return CasingMode::Upper;
     }
-    if let Some(first) = typed_trigger.chars().next() {
+    if let Some(first) = letters.chars().next() {
         if first.is_uppercase() {
-            let rest: String = typed_trigger.chars().skip(1).collect();
-            if rest.chars().all(|c| !c.is_alphabetic() || c.is_lowercase()) {
+            let rest: String = letters.chars().skip(1).collect();
+            if rest.chars().all(|c| c.is_lowercase()) {
                 return CasingMode::Capital;
             }
         }
