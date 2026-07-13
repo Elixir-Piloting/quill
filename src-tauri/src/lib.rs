@@ -6,7 +6,7 @@ mod tray;
 
 use std::sync::{atomic::Ordering, Arc};
 
-use tauri::{Listener, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 use db::{Snippet, Variable};
@@ -107,8 +107,15 @@ fn get_paused(state: tauri::State<'_, Arc<AppState>>) -> bool {
 // ── Popup commands ──
 
 #[tauri::command]
-fn inject_from_popup(expansion: String, state: tauri::State<'_, Arc<AppState>>) {
+fn close_and_inject(expansion: String, state: tauri::State<'_, Arc<AppState>>, app: tauri::AppHandle) {
+    if let Some(popup) = app.get_webview_window("search") {
+        let _ = popup.hide();
+    }
+    std::thread::sleep(std::time::Duration::from_millis(100));
     injection::inject_text(&expansion, &state.inner());
+    if let Some(popup) = app.get_webview_window("search") {
+        let _ = popup.close();
+    }
 }
 
 #[tauri::command]
@@ -293,13 +300,6 @@ pub fn run() {
                 let _ = app.global_shortcut().register(shortcut);
             }
 
-            let inject_state = app_state.clone();
-            app.listen("popup-inject", move |event| {
-                let expansion = event.payload().trim_matches('"').to_string();
-                std::thread::sleep(std::time::Duration::from_millis(150));
-                injection::inject_text(&expansion, &inject_state);
-            });
-
             app.manage(app_state);
             Ok(())
         })
@@ -320,7 +320,7 @@ pub fn run() {
             delete_variable,
             toggle_paused,
             get_paused,
-            inject_from_popup,
+            close_and_inject,
             get_cursor_position,
             get_hotkey,
             set_hotkey,

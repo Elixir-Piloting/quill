@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 interface Snippet {
@@ -38,8 +37,7 @@ function Popup() {
   async function select(idx: number) {
     const s = filtered[idx];
     if (!s) return;
-    await emit("popup-inject", s.expansion);
-    await getCurrentWindow().close();
+    await invoke("close_and_inject", { expansion: s.expansion });
   }
 
   function handleKey(e: React.KeyboardEvent) {

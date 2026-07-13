@@ -640,8 +640,8 @@ function App() {
       </Dialog>
 
       {/* ═══ Settings dialog ═══ */}
-      <Dialog open={settingsDlg} onOpenChange={(open) => { setSettingsDlg(open); if (open) setSettingsTab('general'); }}>
-        <DialogContent className="sm:max-w-sm">
+      <Dialog open={settingsDlg} onOpenChange={(open) => { setSettingsDlg(open); setRecordingHotkey(false); if (open) setSettingsTab('general'); }}>
+        <DialogContent className="sm:max-w-sm h-[360px] flex flex-col">
           <DialogHeader>
             <DialogTitle>Settings</DialogTitle>
           </DialogHeader>
