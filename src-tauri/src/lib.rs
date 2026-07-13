@@ -166,29 +166,22 @@ fn open_search_popup(app: tauri::AppHandle) {
 }
 
 fn toggle_popup(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let cursor = get_cursor_position();
-
     if let Some(popup) = app.get_webview_window("search") {
         let visible = popup.is_visible().ok();
         if visible == Some(true) {
             let _ = popup.hide();
         } else {
-            let _ = popup.set_position(tauri::PhysicalPosition::new(
-                (cursor.0 - 200.0).max(0.0) as i32,
-                cursor.1 as i32,
-            ));
             let _ = popup.show();
             let _ = popup.set_focus();
         }
     } else {
-        let popup = WebviewWindowBuilder::new(app, "search", WebviewUrl::App("index.html".into()))
+        let _ = WebviewWindowBuilder::new(app, "search", WebviewUrl::App("index.html".into()))
             .decorations(false)
             .always_on_top(true)
-            .inner_size(400.0, 480.0)
-            .position((cursor.0 - 200.0).max(0.0), cursor.1)
+            .inner_size(400.0, 360.0)
+            .center()
             .title("Quill Search")
             .build()?;
-        let _ = popup.set_focus();
     }
     Ok(())
 }

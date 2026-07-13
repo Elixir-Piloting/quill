@@ -123,6 +123,33 @@ function previewDate(pattern: string): string {
 // ── App ──
 
 function App() {
+  const [paused, setPaused] = useState(false);
+
+  // Theme (runs in all windows including popup)
+  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() => {
+    const stored = localStorage.getItem('quill-theme');
+    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
+    return 'system';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => {
+      if (theme === 'light') { root.classList.remove('dark'); }
+      else if (theme === 'dark') { root.classList.add('dark'); }
+      else if (mq.matches) { root.classList.add('dark'); }
+      else { root.classList.remove('dark'); }
+    };
+    apply();
+    localStorage.setItem('quill-theme', theme);
+    if (theme === 'system') {
+      const handler = () => apply();
+      mq.addEventListener('change', handler);
+      return () => mq.removeEventListener('change', handler);
+    }
+  }, [theme]);
+
   // If we're in the search popup window, render the popup UI
   try {
     const win = getCurrentWindow();
@@ -130,8 +157,6 @@ function App() {
       return <Popup />;
     }
   } catch {}
-
-  const [paused, setPaused] = useState(false);
 
   // Tabs
   const [tab, setTab] = useState<'snippets' | 'variables'>('snippets');
@@ -147,11 +172,6 @@ function App() {
 
   // Settings
   const [settingsDlg, setSettingsDlg] = useState(false);
-  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() => {
-    const stored = localStorage.getItem('quill-theme');
-    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
-    return 'system';
-  });
 
   // Confirm dialog
   const [confirmDlg, setConfirmDlg] = useState(false);
@@ -164,6 +184,7 @@ function App() {
 
   // Hotkey
   const [hotkey, setHotkeyState] = useState("Alt+Space");
+  const [recordingHotkey, setRecordingHotkey] = useState(false);
 
   useEffect(() => {
     invoke<string>("get_hotkey").then(setHotkeyState).catch(() => {});
@@ -173,6 +194,37 @@ function App() {
     setHotkeyState(hk);
     invoke("set_hotkey", { hotkey: hk }).catch(() => {});
   }
+
+  function startRecording() {
+    setRecordingHotkey(true);
+  }
+
+  useEffect(() => {
+    if (!recordingHotkey) return;
+    function handler(e: KeyboardEvent) {
+      e.preventDefault();
+      e.stopPropagation();
+      const mods: string[] = [];
+      if (e.ctrlKey) mods.push("Ctrl");
+      if (e.altKey) mods.push("Alt");
+      if (e.shiftKey) mods.push("Shift");
+      if (e.metaKey) mods.push("Super");
+      let key = "";
+      if (e.key === " ") key = "Space";
+      else if (e.key === "Escape") key = "Escape";
+      else if (e.key === "Enter") key = "Enter";
+      else if (e.key === "Tab") key = "Tab";
+      else if (e.key.startsWith("F") && e.key.length <= 3) key = e.key;
+      else if (e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) key = e.key.toUpperCase();
+      else return;
+      if (mods.length === 0) return;
+      const combo = [...mods, key].join("+");
+      setRecordingHotkey(false);
+      changeHotkey(combo);
+    }
+    document.addEventListener("keydown", handler, true);
+    return () => document.removeEventListener("keydown", handler, true);
+  }, [recordingHotkey]);
 
   // Update
   const [updateDlg, setUpdateDlg] = useState(false);
@@ -229,25 +281,6 @@ function App() {
     const unlisten = listen<boolean>("paused-changed", (e) => setPaused(e.payload));
     return () => { unlisten.then((f) => f()); };
   }, []);
-
-  // Theme
-  useEffect(() => {
-    const root = document.documentElement;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const apply = () => {
-      if (theme === 'light') { root.classList.remove('dark'); }
-      else if (theme === 'dark') { root.classList.add('dark'); }
-      else if (mq.matches) { root.classList.add('dark'); }
-      else { root.classList.remove('dark'); }
-    };
-    apply();
-    localStorage.setItem('quill-theme', theme);
-    if (theme === 'system') {
-      const handler = () => apply();
-      mq.addEventListener('change', handler);
-      return () => mq.removeEventListener('change', handler);
-    }
-  }, [theme]);
 
   // ── Window controls ──
   const appWindow = getCurrentWindow();
@@ -649,19 +682,20 @@ function App() {
             {/* Search hotkey */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-muted-foreground">Search popup hotkey</label>
-              <Select value={hotkey} onValueChange={(v) => { if (v) changeHotkey(v); }}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="Alt+Space">Alt+Space</SelectItem>
-                    <SelectItem value="Ctrl+Shift+S">Ctrl+Shift+S</SelectItem>
-                    <SelectItem value="Ctrl+Space">Ctrl+Space</SelectItem>
-                    <SelectItem value="Alt+Shift+S">Alt+Shift+S</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                {recordingHotkey ? (
+                  <div className="flex h-8 flex-1 items-center rounded-md border border-dashed px-3 text-xs text-muted-foreground">
+                    Press a key combination…
+                  </div>
+                ) : (
+                  <div className="flex h-8 flex-1 items-center rounded-md border bg-background px-3 font-mono text-xs">
+                    {hotkey}
+                  </div>
+                )}
+                <Button variant="outline" size="xs" onClick={startRecording} disabled={recordingHotkey}>
+                  {recordingHotkey ? "…" : "Record"}
+                </Button>
+              </div>
             </div>
 
           </div>
