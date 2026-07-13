@@ -1,4 +1,5 @@
 mod db;
+mod export;
 mod hook;
 mod injection;
 mod process;
@@ -202,6 +203,38 @@ fn get_running_apps() -> Vec<process::AppEntry> {
     process::get_running_apps()
 }
 
+// ── Import/Export commands ──
+
+#[tauri::command]
+fn export_data(
+    state: tauri::State<'_, Arc<AppState>>,
+    path: String,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let json = export::build_export(&conn)?;
+    export::write_export_json(&path, &json)
+}
+
+#[tauri::command]
+fn validate_import(
+    _state: tauri::State<'_, Arc<AppState>>,
+    path: String,
+) -> Result<export::ImportPreview, String> {
+    let json = export::read_import_json(&path)?;
+    export::validate_import(&json)
+}
+
+#[tauri::command]
+fn execute_import(
+    state: tauri::State<'_, Arc<AppState>>,
+    path: String,
+    mode: String,
+) -> Result<export::ImportResult, String> {
+    let json = export::read_import_json(&path)?;
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    export::execute_import(&conn, &json, &mode)
+}
+
 // ── Popup commands ──
 
 #[tauri::command]
@@ -332,6 +365,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::default().build())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, _shortcut, event| {
@@ -412,6 +446,9 @@ pub fn run() {
             set_hotkey,
             open_search_popup,
             get_running_apps,
+            export_data,
+            validate_import,
+            execute_import,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

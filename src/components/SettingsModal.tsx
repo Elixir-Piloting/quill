@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { save, open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Download } from "lucide-react";
+import { ExternalLink, Download, UploadIcon, DownloadIcon } from "lucide-react";
 import HotkeyRecorder from "./HotkeyRecorder";
 
 type Theme = "system" | "light" | "dark";
@@ -19,14 +21,98 @@ interface Props {
   onChangeBootPriority: (v: string) => void;
   hotkey: string;
   onChangeHotkey: (hk: string) => void;
+  onRefreshSnippets: () => void;
 }
 
 type Tab = "general" | "hotkey" | "about";
 
+interface ImportPreview {
+  snippet_count: number;
+  variable_count: number;
+  form_input_count: number;
+  version: number;
+  is_version_future: boolean;
+}
+
+interface ImportResult {
+  snippets_imported: number;
+  variables_imported: number;
+  form_inputs_imported: number;
+  duplicates_skipped: number;
+}
+
 function SettingsModal(props: Props) {
   const [tab, setTab] = useState<Tab>("general");
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importMode, setImportMode] = useState<"merge" | "replace">("merge");
+  const [replaceConfirmed, setReplaceConfirmed] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importFilePath, setImportFilePath] = useState<string>("");
+  const [importError, setImportError] = useState<string>("");
+  const [importing, setImporting] = useState(false);
 
   if (!props.open) return null;
+
+  async function handleExport() {
+    try {
+      const path = await save({
+        filters: [{ name: "Quill Export", extensions: ["json"] }],
+        defaultPath: "quill-export.json",
+      });
+      if (!path) return;
+      await invoke("export_data", { path });
+    } catch (e) {
+      console.error("Export failed:", e);
+    }
+  }
+
+  async function handleImport() {
+    setImportError("");
+    setImportPreview(null);
+    setImportResult(null);
+    setImportMode("merge");
+    setReplaceConfirmed(false);
+
+    try {
+      const path = await open({
+        filters: [{ name: "Quill Export", extensions: ["json"] }],
+        multiple: false,
+      });
+      if (!path) return;
+      setImportFilePath(path as string);
+      const preview: ImportPreview = await invoke("validate_import", { path });
+      setImportPreview(preview);
+    } catch (e) {
+      setImportError(String(e));
+    }
+  }
+
+  async function confirmImport() {
+    if (!importFilePath || importing) return;
+    setImporting(true);
+    setImportError("");
+    try {
+      const result: ImportResult = await invoke("execute_import", {
+        path: importFilePath,
+        mode: importMode,
+      });
+      setImportResult(result);
+      props.onRefreshSnippets();
+    } catch (e) {
+      setImportError(String(e));
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function closeImportDialog() {
+    setImportPreview(null);
+    setImportResult(null);
+    setImportError("");
+    setImportFilePath("");
+    setImportMode("merge");
+    setReplaceConfirmed(false);
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onMouseDown={props.onClose}>
@@ -46,7 +132,7 @@ function SettingsModal(props: Props) {
         </div>
         <div className="flex flex-1 flex-col">
           <div className="flex-1 overflow-y-auto p-5">
-            {tab === "general" && <GeneralTab {...props} />}
+            {tab === "general" && <GeneralTab {...props} onExport={handleExport} onImport={handleImport} />}
             {tab === "hotkey" && <HotkeyTab {...props} />}
             {tab === "about" && <AboutTab />}
           </div>
@@ -55,18 +141,115 @@ function SettingsModal(props: Props) {
           </div>
         </div>
       </div>
+
+      {/* Import preview dialog */}
+      {(importPreview || importResult || importError) && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onMouseDown={closeImportDialog}>
+          <div className="w-[420px] rounded-xl bg-popover p-5 shadow-2xl ring-1 ring-border" onMouseDown={(e) => e.stopPropagation()}>
+            {importError && !importPreview && !importResult && (
+              <div className="flex flex-col gap-3">
+                <h3 className="text-sm font-semibold">Import Error</h3>
+                <p className="text-xs text-destructive">{importError}</p>
+                <Button variant="outline" size="sm" onClick={closeImportDialog}>Close</Button>
+              </div>
+            )}
+
+            {importResult && (
+              <div className="flex flex-col gap-3">
+                <h3 className="text-sm font-semibold">Import Complete</h3>
+                <p className="text-xs text-muted-foreground">
+                  Imported {importResult.snippets_imported} snippets, {importResult.variables_imported} variables, {importResult.form_inputs_imported} form inputs.
+                  {importResult.duplicates_skipped > 0 && (
+                    <> {importResult.duplicates_skipped} duplicates skipped.</>
+                  )}
+                </p>
+                <Button variant="outline" size="sm" onClick={closeImportDialog}>OK</Button>
+              </div>
+            )}
+
+            {importPreview && !importResult && (
+              <div className="flex flex-col gap-4">
+                <h3 className="text-sm font-semibold">Import Preview</h3>
+
+                {importPreview.is_version_future && (
+                  <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
+                    This export file uses format v{importPreview.version}, which is newer than the currently supported v1.
+                    Some data may not import correctly.
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                  <p>Snippets: <span className="font-medium text-foreground">{importPreview.snippet_count}</span></p>
+                  <p>Variables: <span className="font-medium text-foreground">{importPreview.variable_count}</span></p>
+                  <p>Form inputs: <span className="font-medium text-foreground">{importPreview.form_input_count}</span></p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="radio"
+                      name="importMode"
+                      checked={importMode === "merge"}
+                      onChange={() => { setImportMode("merge"); setReplaceConfirmed(false); }}
+                      className="size-3.5 accent-primary"
+                    />
+                    Merge — add alongside existing items (duplicates skipped)
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="radio"
+                      name="importMode"
+                      checked={importMode === "replace"}
+                      onChange={() => { setImportMode("replace"); setReplaceConfirmed(false); }}
+                      className="size-3.5 accent-primary"
+                    />
+                    Replace all — wipe existing data first
+                  </label>
+                  {importMode === "replace" && (
+                    <label className="flex items-center gap-2 pl-5 text-xs text-destructive">
+                      <input
+                        type="checkbox"
+                        checked={replaceConfirmed}
+                        onChange={(e) => setReplaceConfirmed(e.target.checked)}
+                        className="size-3.5 accent-destructive"
+                      />
+                      I understand this will delete all current snippets and variables
+                    </label>
+                  )}
+                </div>
+
+                {importError && (
+                  <p className="text-xs text-destructive">{importError}</p>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={closeImportDialog}>Cancel</Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={confirmImport}
+                    disabled={importing || (importMode === "replace" && !replaceConfirmed)}
+                  >
+                    {importing ? "Importing..." : "Import"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function GeneralTab({ theme, onChangeTheme, closeToTray, onChangeCloseToTray, runOnBoot, onChangeRunOnBoot, bootPriority, onChangeBootPriority }: Props) {
+function GeneralTab({ onExport, onImport, ...props }: Props & { onExport: () => void; onImport: () => void }) {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1.5">
         <label className="text-xs font-medium text-muted-foreground">Theme</label>
         <div className="flex gap-2">
           {(["system", "light", "dark"] as const).map((t) => (
-            <Button key={t} variant={theme === t ? "default" : "outline"} size="sm" onClick={() => onChangeTheme(t)}>
+            <Button key={t} variant={props.theme === t ? "default" : "outline"} size="sm" onClick={() => props.onChangeTheme(t)}>
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </Button>
           ))}
@@ -77,8 +260,8 @@ function GeneralTab({ theme, onChangeTheme, closeToTray, onChangeCloseToTray, ru
           <span className="text-sm font-medium">Close to tray</span>
           <span className="text-xs text-muted-foreground">Minimize to tray instead of quitting</span>
         </div>
-        <Button variant={closeToTray ? "default" : "outline"} size="sm" onClick={() => onChangeCloseToTray(!closeToTray)}>
-          {closeToTray ? "On" : "Off"}
+        <Button variant={props.closeToTray ? "default" : "outline"} size="sm" onClick={() => props.onChangeCloseToTray(!props.closeToTray)}>
+          {props.closeToTray ? "On" : "Off"}
         </Button>
       </div>
       <div className="flex items-center justify-between">
@@ -86,18 +269,31 @@ function GeneralTab({ theme, onChangeTheme, closeToTray, onChangeCloseToTray, ru
           <span className="text-sm font-medium">Run on boot</span>
           <span className="text-xs text-muted-foreground">Auto-start Quill when you log in</span>
         </div>
-        <Button variant={runOnBoot ? "default" : "outline"} size="sm" onClick={() => onChangeRunOnBoot(!runOnBoot)}>
-          {runOnBoot ? "On" : "Off"}
+        <Button variant={props.runOnBoot ? "default" : "outline"} size="sm" onClick={() => props.onChangeRunOnBoot(!props.runOnBoot)}>
+          {props.runOnBoot ? "On" : "Off"}
         </Button>
       </div>
       <div className="flex flex-col gap-1.5">
         <label className="text-xs font-medium text-muted-foreground">Boot priority</label>
         <div className="flex gap-2">
           {(["low", "normal", "high"] as const).map((p) => (
-            <Button key={p} variant={bootPriority === p ? "default" : "outline"} size="sm" onClick={() => onChangeBootPriority(p)}>
+            <Button key={p} variant={props.bootPriority === p ? "default" : "outline"} size="sm" onClick={() => props.onChangeBootPriority(p)}>
               {p.charAt(0).toUpperCase() + p.slice(1)}
             </Button>
           ))}
+        </div>
+      </div>
+      <div className="border-t pt-4">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-muted-foreground">Import / Export</label>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onExport}>
+              <DownloadIcon className="size-3.5" /> Export Snippets
+            </Button>
+            <Button variant="outline" size="sm" onClick={onImport}>
+              <UploadIcon className="size-3.5" /> Import Snippets
+            </Button>
+          </div>
         </div>
       </div>
     </div>

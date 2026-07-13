@@ -155,6 +155,7 @@ function AppShell() {
         onChangeBootPriority={setBootPriority}
         hotkey={hotkey}
         onChangeHotkey={changeHotkey}
+        onRefreshSnippets={loadSnippets}
       />
     </div>
   );

@@ -20,6 +20,9 @@
     "updater:default",
     "updater:allow-check",
     "updater:allow-download-and-install",
-    "autostart:default"
+    "autostart:default",
+    "dialog:default",
+    "dialog:allow-open",
+    "dialog:allow-save"
   ]
 }
