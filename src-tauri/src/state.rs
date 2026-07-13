@@ -5,4 +5,5 @@ pub struct AppState {
     pub buffer: Mutex<String>,
     pub paused: AtomicBool,
     pub injecting: AtomicBool,
+    pub cancelling: AtomicBool,
 }

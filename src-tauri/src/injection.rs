@@ -42,8 +42,9 @@ fn clipboard_paste(text: &str, state: &AppState, cursor_left: Option<usize>) {
         if offset > 0 {
             for _ in 0..offset {
                 let _ = enigo.key(Key::LeftArrow, Direction::Click);
-                std::thread::sleep(Duration::from_millis(10));
+                if state.cancelling.load(Ordering::Relaxed) { break; }
             }
+            std::thread::sleep(Duration::from_millis(30));
         }
     }
 }

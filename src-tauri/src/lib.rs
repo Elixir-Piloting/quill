@@ -108,6 +108,7 @@ fn get_paused(state: tauri::State<'_, Arc<AppState>>) -> bool {
 
 #[tauri::command]
 fn close_and_inject(expansion: String, state: tauri::State<'_, Arc<AppState>>, app: tauri::AppHandle) {
+    state.cancelling.store(false, Ordering::SeqCst);
     if let Some(popup) = app.get_webview_window("search") {
         let _ = popup.hide();
     }
@@ -116,6 +117,11 @@ fn close_and_inject(expansion: String, state: tauri::State<'_, Arc<AppState>>, a
     if let Some(popup) = app.get_webview_window("search") {
         let _ = popup.close();
     }
+}
+
+#[tauri::command]
+fn cancel_injection(state: tauri::State<'_, Arc<AppState>>) {
+    state.cancelling.store(true, Ordering::SeqCst);
 }
 
 #[tauri::command]
@@ -281,6 +287,7 @@ pub fn run() {
                 buffer: std::sync::Mutex::new(String::new()),
                 paused: std::sync::atomic::AtomicBool::new(false),
                 injecting: std::sync::atomic::AtomicBool::new(false),
+                cancelling: std::sync::atomic::AtomicBool::new(false),
             });
 
             let _ = tray::setup_tray(app.handle(), app_state.clone());
@@ -324,6 +331,7 @@ pub fn run() {
             toggle_paused,
             get_paused,
             close_and_inject,
+            cancel_injection,
             get_cursor_position,
             get_hotkey,
             set_hotkey,
