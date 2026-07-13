@@ -1,16 +1,34 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { format } from "date-fns";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { CalendarIcon } from "lucide-react";
 
 interface FormInput {
   id: number;
   name: string;
   label: string;
+  field_type: string;
   placeholder: string;
   default_value: string;
   required: boolean;
   created_at: string;
 }
+
+const FIELD_TYPE_LABELS: Record<string, string> = {
+  text: "Text",
+  date: "Date",
+  number: "Number",
+  email: "Email",
+  textarea: "Textarea",
+};
 
 function FormPopup() {
   const [trigger, setTrigger] = useState("");
@@ -109,16 +127,53 @@ function FormPopup() {
               <label className="text-xs font-medium text-muted-foreground">
                 {f.label}
                 {f.required && <span className="ml-0.5 text-destructive">*</span>}
+                <span className="ml-1.5 text-[10px] text-muted-foreground/60">({FIELD_TYPE_LABELS[f.field_type] || f.field_type})</span>
               </label>
-              <input
-                data-form-idx={i}
-                autoFocus={i === 0}
-                value={values[f.name] ?? ""}
-                onChange={(e) => setValue(f.name, e.target.value)}
-                onKeyDown={(e) => handleKey(e, i)}
-                placeholder={f.placeholder || undefined}
-                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground outline-none ring-ring focus:ring-2"
-              />
+              {f.field_type === "date" ? (
+                <Popover>
+                  <PopoverTrigger
+                    render={
+                      <Button
+                        variant="outline"
+                        data-empty={!values[f.name]}
+                        className="justify-start text-left font-normal data-[empty=true]:text-muted-foreground"
+                      />
+                    }
+                  >
+                    <CalendarIcon className="size-4" />
+                    {values[f.name] ? format(new Date(values[f.name]), "PPP") : <span>{f.placeholder || "Pick a date"}</span>}
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={values[f.name] ? new Date(values[f.name]) : undefined}
+                      onSelect={(date) => setValue(f.name, date ? format(date, "yyyy-MM-dd") : "")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              ) : f.field_type === "textarea" ? (
+                <textarea
+                  data-form-idx={i}
+                  autoFocus={i === 0}
+                  value={values[f.name] ?? ""}
+                  onChange={(e) => setValue(f.name, e.target.value)}
+                  onKeyDown={(e) => handleKey(e, i)}
+                  placeholder={f.placeholder || undefined}
+                  rows={3}
+                  className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground outline-none ring-ring focus:ring-2 resize-none"
+                />
+              ) : (
+                <input
+                  data-form-idx={i}
+                  autoFocus={i === 0}
+                  type={f.field_type === "number" ? "number" : f.field_type === "email" ? "email" : "text"}
+                  value={values[f.name] ?? ""}
+                  onChange={(e) => setValue(f.name, e.target.value)}
+                  onKeyDown={(e) => handleKey(e, i)}
+                  placeholder={f.placeholder || undefined}
+                  className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground outline-none ring-ring focus:ring-2"
+                />
+              )}
               {errors[f.name] && (
                 <span className="text-xs text-destructive">{errors[f.name]}</span>
               )}

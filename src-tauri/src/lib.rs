@@ -107,12 +107,13 @@ fn add_form_input(
     state: tauri::State<'_, Arc<AppState>>,
     name: String,
     label: String,
+    fieldType: String,
     placeholder: String,
-    default_value: String,
+    defaultValue: String,
     required: bool,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::add_form_input(&conn, &name, &label, &placeholder, &default_value, required).map_err(|e| e.to_string())
+    db::add_form_input(&conn, &name, &label, &fieldType, &placeholder, &defaultValue, required).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -121,12 +122,13 @@ fn update_form_input(
     id: i64,
     name: String,
     label: String,
+    fieldType: String,
     placeholder: String,
-    default_value: String,
+    defaultValue: String,
     required: bool,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::update_form_input(&conn, id, &name, &label, &placeholder, &default_value, required).map_err(|e| e.to_string())
+    db::update_form_input(&conn, id, &name, &label, &fieldType, &placeholder, &defaultValue, required).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -24,6 +24,7 @@ pub struct FormInput {
     pub id: i64,
     pub name: String,
     pub label: String,
+    pub field_type: String,
     pub placeholder: String,
     pub default_value: String,
     pub required: bool,
@@ -55,6 +56,7 @@ pub fn init_db(db_path: &str) -> Result<Connection> {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
             label TEXT NOT NULL,
+            field_type TEXT NOT NULL DEFAULT 'text',
             placeholder TEXT NOT NULL DEFAULT '',
             default_value TEXT NOT NULL DEFAULT '',
             required INTEGER NOT NULL DEFAULT 1,
@@ -63,6 +65,9 @@ pub fn init_db(db_path: &str) -> Result<Connection> {
     )?;
     let _ = conn.execute_batch(
         "ALTER TABLE snippets ADD COLUMN whole_word INTEGER NOT NULL DEFAULT 1;",
+    );
+    let _ = conn.execute_batch(
+        "ALTER TABLE form_inputs ADD COLUMN field_type TEXT NOT NULL DEFAULT 'text';",
     );
     Ok(conn)
 }
@@ -175,7 +180,7 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
 
 pub fn get_all_form_inputs(conn: &Connection) -> Result<Vec<FormInput>> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, label, placeholder, default_value, required, created_at
+        "SELECT id, name, label, field_type, placeholder, default_value, required, created_at
          FROM form_inputs ORDER BY created_at DESC",
     )?;
     let fields = stmt
@@ -184,28 +189,29 @@ pub fn get_all_form_inputs(conn: &Connection) -> Result<Vec<FormInput>> {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 label: row.get(2)?,
-                placeholder: row.get(3)?,
-                default_value: row.get(4)?,
-                required: row.get::<_, i64>(5)? != 0,
-                created_at: row.get(6)?,
+                field_type: row.get(3)?,
+                placeholder: row.get(4)?,
+                default_value: row.get(5)?,
+                required: row.get::<_, i64>(6)? != 0,
+                created_at: row.get(7)?,
             })
         })?
         .collect::<Result<Vec<_>>>()?;
     Ok(fields)
 }
 
-pub fn add_form_input(conn: &Connection, name: &str, label: &str, placeholder: &str, default_value: &str, required: bool) -> Result<()> {
+pub fn add_form_input(conn: &Connection, name: &str, label: &str, field_type: &str, placeholder: &str, default_value: &str, required: bool) -> Result<()> {
     conn.execute(
-        "INSERT INTO form_inputs (name, label, placeholder, default_value, required) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![name, label, placeholder, default_value, required as i64],
+        "INSERT INTO form_inputs (name, label, field_type, placeholder, default_value, required) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![name, label, field_type, placeholder, default_value, required as i64],
     )?;
     Ok(())
 }
 
-pub fn update_form_input(conn: &Connection, id: i64, name: &str, label: &str, placeholder: &str, default_value: &str, required: bool) -> Result<()> {
+pub fn update_form_input(conn: &Connection, id: i64, name: &str, label: &str, field_type: &str, placeholder: &str, default_value: &str, required: bool) -> Result<()> {
     conn.execute(
-        "UPDATE form_inputs SET name = ?1, label = ?2, placeholder = ?3, default_value = ?4, required = ?5 WHERE id = ?6",
-        params![name, label, placeholder, default_value, required as i64, id],
+        "UPDATE form_inputs SET name = ?1, label = ?2, field_type = ?3, placeholder = ?4, default_value = ?5, required = ?6 WHERE id = ?7",
+        params![name, label, field_type, placeholder, default_value, required as i64, id],
     )?;
     Ok(())
 }

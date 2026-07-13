@@ -44,11 +44,20 @@ interface FormInput {
   id: number;
   name: string;
   label: string;
+  field_type: string;
   placeholder: string;
   default_value: string;
   required: boolean;
   created_at: string;
 }
+
+const FIELD_TYPE_LABELS: Record<string, string> = {
+  text: "Text",
+  date: "Date",
+  number: "Number",
+  email: "Email",
+  textarea: "Textarea",
+};
 
 function slug(label: string): string {
   return label
@@ -143,10 +152,19 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
   const [editingForm, setEditingForm] = useState<FormInput | null>(null);
   const [formName, setFormName] = useState("");
   const [formLabel, setFormLabel] = useState("");
+  const [formFieldType, setFormFieldType] = useState("text");
   const [formPlaceholder, setFormPlaceholder] = useState("");
   const [formDefault, setFormDefault] = useState("");
   const [formRequired, setFormRequired] = useState(true);
   const formNameTouched = useRef(false);
+
+  const FORM_FIELD_TYPES = [
+    { value: "text", label: "Text" },
+    { value: "date", label: "Date" },
+    { value: "number", label: "Number" },
+    { value: "email", label: "Email" },
+    { value: "textarea", label: "Textarea" },
+  ];
 
   // Variable dialog
   const [variableDlg, setVariableDlg] = useState(false);
@@ -223,6 +241,7 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     setEditingForm(null);
     setFormName("");
     setFormLabel("");
+    setFormFieldType("text");
     setFormPlaceholder("");
     setFormDefault("");
     setFormRequired(true);
@@ -234,6 +253,7 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     setEditingForm(f);
     setFormName(f.name);
     setFormLabel(f.label);
+    setFormFieldType(f.field_type);
     setFormPlaceholder(f.placeholder);
     setFormDefault(f.default_value);
     setFormRequired(f.required);
@@ -245,6 +265,7 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     const payload = {
       name: formName.trim(),
       label: formLabel.trim() || formName.trim(),
+      fieldType: formFieldType,
       placeholder: formPlaceholder.trim(),
       defaultValue: formDefault.trim(),
       required: formRequired,
@@ -441,6 +462,7 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
                       <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead>Label</TableHead>
+                        <TableHead>Type</TableHead>
                         <TableHead>Required</TableHead>
                         <TableHead className="w-0 text-right">Actions</TableHead>
                       </TableRow>
@@ -450,6 +472,7 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
                         <TableRow key={f.id}>
                           <TableCell className="font-mono text-xs">{`{${f.name}}`}</TableCell>
                           <TableCell className="text-muted-foreground">{f.label}</TableCell>
+                          <TableCell><Badge variant="secondary">{FIELD_TYPE_LABELS[f.field_type] || f.field_type}</Badge></TableCell>
                           <TableCell>{f.required ? <Badge>Yes</Badge> : <Badge variant="secondary">No</Badge>}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
@@ -561,16 +584,33 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
                 <Input id="form-name" value={formName} onChange={(e) => { formNameTouched.current = true; setFormName(e.target.value); }} placeholder="auto-generated from label" />
                 <span className="text-xs text-muted-foreground">Use <code className="font-mono text-primary">{`{${formName || 'name'}}`}</code> in snippet expansion</span>
               </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="form-field-type" className="text-xs font-medium text-muted-foreground">Type</label>
+                <Select value={formFieldType} onValueChange={(v) => { if (v) setFormFieldType(v); }}>
+                  <SelectTrigger id="form-field-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {FORM_FIELD_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+              {formFieldType !== "textarea" && (
               <div className="flex gap-2">
                 <div className="flex flex-1 flex-col gap-1.5">
                   <label htmlFor="form-placeholder" className="text-xs font-medium text-muted-foreground">Placeholder (optional)</label>
-                  <Input id="form-placeholder" value={formPlaceholder} onChange={(e) => setFormPlaceholder(e.target.value)} placeholder="e.g. John Doe" />
+                  <Input id="form-placeholder" value={formPlaceholder} onChange={(e) => setFormPlaceholder(e.target.value)} placeholder={formFieldType === "date" ? "e.g. Select a date" : "e.g. John Doe"} />
                 </div>
                 <div className="flex flex-1 flex-col gap-1.5">
                   <label htmlFor="form-default" className="text-xs font-medium text-muted-foreground">Default value (optional)</label>
-                  <Input id="form-default" value={formDefault} onChange={(e) => setFormDefault(e.target.value)} placeholder="e.g. John" />
+                  <Input id="form-default" value={formDefault} onChange={(e) => setFormDefault(e.target.value)} placeholder={formFieldType === "date" ? "e.g. 2026-07-13" : "e.g. John"} />
                 </div>
               </div>
+              )}
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <input type="checkbox" checked={formRequired} onChange={(e) => setFormRequired(e.target.checked)} className="size-3.5 accent-primary" />
                 Required
