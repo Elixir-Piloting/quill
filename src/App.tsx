@@ -139,6 +139,10 @@ function App() {
     return 'system';
   });
 
+  // Confirm dialog
+  const [confirmDlg, setConfirmDlg] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ type: 'snippet' | 'variable'; id: number; label: string } | null>(null);
+
   // Variables
   const [variables, setVariables] = useState<Variable[]>([]);
   const [variableDlg, setVariableDlg] = useState(false);
@@ -205,6 +209,24 @@ function App() {
     }
     setSnippetDlg(false);
     loadSnippets();
+  }
+
+  function requestDelete(type: 'snippet' | 'variable', id: number, label: string) {
+    setPendingDelete({ type, id, label });
+    setConfirmDlg(true);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    if (pendingDelete.type === 'snippet') {
+      await invoke("delete_snippet", { id: pendingDelete.id });
+      loadSnippets();
+    } else {
+      await invoke("delete_variable", { id: pendingDelete.id });
+      loadVariables();
+    }
+    setConfirmDlg(false);
+    setPendingDelete(null);
   }
 
   async function deleteSnippet(id: number) {
@@ -296,7 +318,10 @@ function App() {
     <div className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
       {/* ═══ Header ═══ */}
       <header className="flex items-center justify-between">
-        <h1 className="font-heading text-xl font-semibold">Quill</h1>
+        <div className="flex items-center gap-2">
+          <img src="/quill-icon.png" alt="Quill" className="size-7" />
+          <h1 className="font-heading text-xl font-semibold">Quill</h1>
+        </div>
         <div className="flex items-center gap-2">
           <Button variant={paused ? "secondary" : "default"} onClick={togglePause}>
             {paused ? "Paused" : "Active"}
@@ -338,7 +363,7 @@ function App() {
                         <Button variant="outline" size="xs" onClick={() => openEditSnippet(s)}>
                           <PencilIcon />Edit
                         </Button>
-                        <Button variant="destructive" size="xs" onClick={() => deleteSnippet(s.id)}>
+                        <Button variant="destructive" size="xs" onClick={() => requestDelete('snippet', s.id, s.trigger)}>
                           <Trash2Icon />Delete
                         </Button>
                       </div>
@@ -430,7 +455,7 @@ function App() {
                         <Button variant="outline" size="xs" onClick={() => openEditVariable(v)}>
                           <PencilIcon />Edit
                         </Button>
-                        <Button variant="destructive" size="xs" onClick={() => deleteVariable(v.id)}>
+                        <Button variant="destructive" size="xs" onClick={() => requestDelete('variable', v.id, `{${v.name}}`)}>
                           <Trash2Icon />Delete
                         </Button>
                       </div>
@@ -442,6 +467,22 @@ function App() {
           )}
         </CardContent>
       </Card>
+
+      {/* ═══ Confirm delete dialog ═══ */}
+      <Dialog open={confirmDlg} onOpenChange={(open) => { if (!open) setPendingDelete(null); }}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Delete {pendingDelete?.type === 'snippet' ? 'snippet' : 'variable'}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete <strong>{pendingDelete?.label}</strong>? This cannot be undone.
+          </p>
+          <DialogFooter className="mt-2">
+            <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ═══ Settings dialog ═══ */}
       <Dialog open={settingsDlg} onOpenChange={setSettingsDlg}>
