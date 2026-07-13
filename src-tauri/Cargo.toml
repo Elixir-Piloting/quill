@@ -21,3 +21,4 @@ rdev = "0.5"
 enigo = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 arboard = "3"
+tauri-plugin-updater = "2"

@@ -45,7 +45,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { PlusIcon, PencilIcon, Trash2Icon, Settings, Minus, Square, Copy, X } from "lucide-react";
+import { check } from "@tauri-apps/plugin-updater";
+import { PlusIcon, PencilIcon, Trash2Icon, Settings, Minus, Square, Copy, X, ExternalLink, Download } from "lucide-react";
 
 // ── Types ──
 
@@ -149,6 +150,40 @@ function App() {
   const [closeToTray, setCloseToTray] = useState(() => localStorage.getItem('quill-close-to-tray') !== 'false');
   const [runOnBoot, setRunOnBoot] = useState(() => localStorage.getItem('quill-run-on-boot') === 'true');
   const [bootPriority, setBootPriority] = useState(() => localStorage.getItem('quill-boot-priority') || 'normal');
+
+  // Update
+  const [updateDlg, setUpdateDlg] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{ version: string; body?: string } | null>(null);
+  const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'available' | 'downloading' | 'done' | 'none'>('idle');
+
+  async function checkForUpdates() {
+    setUpdateState('checking');
+    try {
+      const update = await check();
+      if (update) {
+        setUpdateInfo({ version: update.version, body: update.body });
+        setUpdateState('available');
+        setUpdateDlg(true);
+      } else {
+        setUpdateState('none');
+      }
+    } catch {
+      setUpdateState('none');
+    }
+  }
+
+  async function downloadAndInstall() {
+    setUpdateState('downloading');
+    try {
+      const update = await check();
+      if (update) {
+        await update.downloadAndInstall();
+      }
+    } catch {
+      // fall through
+    }
+    setUpdateState('idle');
+  }
 
   useEffect(() => { localStorage.setItem('quill-close-to-tray', String(closeToTray)); }, [closeToTray]);
   useEffect(() => { localStorage.setItem('quill-run-on-boot', String(runOnBoot)); }, [runOnBoot]);
@@ -578,8 +613,54 @@ function App() {
             </div>
 
           </div>
+
+          {/* About */}
+          <div className="border-t pt-4 flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Quill by <strong>Elixir-Piloting</strong></span>
+              <a href="https://github.com/Elixir-Piloting" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
+                GitHub <ExternalLink className="size-3" />
+              </a>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">v0.1.0</span>
+              <Button variant="outline" size="xs" onClick={checkForUpdates} disabled={updateState === 'checking'}>
+                {updateState === 'checking' ? 'Checking...' : 'Check for Updates'}
+              </Button>
+            </div>
+          </div>
+
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Update dialog ═══ */}
+      <Dialog open={updateDlg} onOpenChange={setUpdateDlg}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Update Available v{updateInfo?.version}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-2">
+            {updateInfo?.body && (
+              <div className="max-h-48 overflow-y-auto rounded-md bg-muted p-3 text-xs text-muted-foreground whitespace-pre-wrap">
+                {updateInfo.body}
+              </div>
+            )}
+            {!updateInfo?.body && (
+              <p className="text-sm text-muted-foreground">A new version of Quill is available.</p>
+            )}
+          </div>
+          <DialogFooter>
+            {updateState === 'downloading' ? (
+              <Button variant="default" size="sm" disabled>Downloading...</Button>
+            ) : (
+              <Button variant="default" size="sm" onClick={downloadAndInstall}>
+                <Download /> Download &amp; Install
+              </Button>
+            )}
+            <DialogClose render={<Button variant="outline" />}>Later</DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>

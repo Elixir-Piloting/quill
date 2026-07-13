@@ -1,0 +1,11 @@
+{
+  "version": "0.1.0",
+  "notes": "Initial release of Quill\n\n- Snippet text expansion with trigger matching\n- Variable system (text, date/time, clipboard)\n- System tray with pause/resume\n- Custom titlebar\n- Theme selector (system/light/dark)\n- Close to tray option\n- Keyboard hook for real-time expansion",
+  "pub_date": "2025-01-01T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "",
+      "url": "https://github.com/Elixir-Piloting/quill/releases/download/v0.1.0/quill_0.1.0_x64-setup.msi"
+    }
+  }
+}
