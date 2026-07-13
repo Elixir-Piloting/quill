@@ -36,9 +36,6 @@ pub fn start_hook(state: Arc<AppState>) {
             }
 
             EventType::KeyRelease(_) => {
-                // Check triggers on key release — by this point the OS
-                // has fully delivered the corresponding KeyPress to the
-                // target application, so the character is already rendered.
                 let current = {
                     let buf = state.buffer.lock().unwrap();
                     buf.clone()
@@ -49,8 +46,8 @@ pub fn start_hook(state: Arc<AppState>) {
                     Err(_) => return,
                 };
 
-                for (trigger, expansion) in &triggers {
-                    if matches_trigger(&current, trigger) {
+                for (trigger, expansion, whole_word) in &triggers {
+                    if matches_trigger(&current, trigger, *whole_word) {
                         if let Ok(mut buf) = state.buffer.lock() {
                             buf.clear();
                         }
@@ -65,12 +62,13 @@ pub fn start_hook(state: Arc<AppState>) {
     });
 }
 
-/// Returns true when `buffer` ends with `trigger` and the trigger is
-/// preceded by a word boundary (or is self-delimiting because it starts
-/// with a non-word character like `;`).
-fn matches_trigger(buffer: &str, trigger: &str) -> bool {
+fn matches_trigger(buffer: &str, trigger: &str, whole_word: bool) -> bool {
     if !buffer.ends_with(trigger) {
         return false;
+    }
+
+    if !whole_word {
+        return true;
     }
 
     let prefix_len = buffer.len() - trigger.len();
@@ -78,14 +76,11 @@ fn matches_trigger(buffer: &str, trigger: &str) -> bool {
         return true;
     }
 
-    // If the trigger starts with a non-word character (e.g. `;`, `!`, `:`)
-    // it acts as its own delimiter — "abc;addr" still matches.
     let first = trigger.chars().next().unwrap();
     if !first.is_alphanumeric() && first != '_' {
         return true;
     }
 
-    // Require a word boundary before the trigger
     let prev = buffer.as_bytes()[prefix_len - 1] as char;
     !prev.is_alphanumeric() && prev != '_'
 }

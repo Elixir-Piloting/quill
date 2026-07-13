@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import Popup from "./Popup";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,6 +52,7 @@ interface Snippet {
   id: number;
   trigger: string;
   expansion: string;
+  whole_word: boolean;
   created_at: string;
 }
 
@@ -121,6 +123,14 @@ function previewDate(pattern: string): string {
 // ── App ──
 
 function App() {
+  // If we're in the search popup window, render the popup UI
+  try {
+    const win = getCurrentWindow();
+    if (win.label !== 'main') {
+      return <Popup />;
+    }
+  } catch {}
+
   const [paused, setPaused] = useState(false);
 
   // Tabs
@@ -132,6 +142,7 @@ function App() {
   const [editingSnip, setEditingSnip] = useState<Snippet | null>(null);
   const [trigger, setTrigger] = useState("");
   const [expansion, setExpansion] = useState("");
+  const [wholeWord, setWholeWord] = useState(true);
   const expansionRef = useRef<HTMLTextAreaElement>(null);
 
   // Settings
@@ -150,6 +161,18 @@ function App() {
   const [closeToTray, setCloseToTray] = useState(() => localStorage.getItem('quill-close-to-tray') !== 'false');
   const [runOnBoot, setRunOnBoot] = useState(() => localStorage.getItem('quill-run-on-boot') === 'true');
   const [bootPriority, setBootPriority] = useState(() => localStorage.getItem('quill-boot-priority') || 'normal');
+
+  // Hotkey
+  const [hotkey, setHotkeyState] = useState("Alt+Space");
+
+  useEffect(() => {
+    invoke<string>("get_hotkey").then(setHotkeyState).catch(() => {});
+  }, []);
+
+  function changeHotkey(hk: string) {
+    setHotkeyState(hk);
+    invoke("set_hotkey", { hotkey: hk }).catch(() => {});
+  }
 
   // Update
   const [updateDlg, setUpdateDlg] = useState(false);
@@ -253,6 +276,7 @@ function App() {
     setEditingSnip(null);
     setTrigger("");
     setExpansion("");
+    setWholeWord(true);
     setSnippetDlg(true);
   }
 
@@ -260,15 +284,16 @@ function App() {
     setEditingSnip(s);
     setTrigger(s.trigger);
     setExpansion(s.expansion);
+    setWholeWord(s.whole_word);
     setSnippetDlg(true);
   }
 
   async function saveSnippet() {
     if (!trigger.trim() || !expansion.trim()) return;
     if (editingSnip) {
-      await invoke("update_snippet", { id: editingSnip.id, trigger: trigger.trim(), expansion: expansion.trim() });
+      await invoke("update_snippet", { id: editingSnip.id, trigger: trigger.trim(), expansion: expansion.trim(), wholeWord });
     } else {
-      await invoke("add_snippet", { trigger: trigger.trim(), expansion: expansion.trim() });
+      await invoke("add_snippet", { trigger: trigger.trim(), expansion: expansion.trim(), wholeWord });
     }
     setSnippetDlg(false);
     loadSnippets();
@@ -518,6 +543,11 @@ function App() {
                       Insert Variable
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="min-w-56">
+                      <DropdownMenuItem onClick={() => insertVariable('cursor')}>
+                        <span className="font-mono text-xs">{`{cursor}`}</span>
+                        <span className="truncate text-xs text-muted-foreground">Cursor position marker</span>
+                      </DropdownMenuItem>
+                      <div className="mx-2 my-1 h-px bg-border" />
                       <DropdownMenuGroup>
                         {variables.length === 0 && (
                           <div className="px-3 py-2 text-xs text-muted-foreground">No variables defined</div>
@@ -533,6 +563,13 @@ function App() {
                   </DropdownMenu>
                 </div>
                 <Textarea id="expansion" ref={expansionRef} value={expansion} onChange={(e) => setExpansion(e.target.value)} placeholder="e.g. 123 Main St" rows={4} />
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={wholeWord} onChange={(e) => setWholeWord(e.target.checked)} className="size-3.5 accent-primary" />
+                  Whole word match only
+                </label>
+                <span className="text-xs text-muted-foreground">Use <code className="font-mono text-primary">{`{cursor}`}</code> to set cursor position</span>
               </div>
             </div>
             <DialogFooter>
@@ -607,6 +644,24 @@ function App() {
                 <Button variant={bootPriority === 'normal' ? 'default' : 'outline'} size="sm" onClick={() => setBootPriority('normal')}>Normal</Button>
                 <Button variant={bootPriority === 'high' ? 'default' : 'outline'} size="sm" onClick={() => setBootPriority('high')}>High</Button>
               </div>
+            </div>
+
+            {/* Search hotkey */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Search popup hotkey</label>
+              <Select value={hotkey} onValueChange={(v) => { if (v) changeHotkey(v); }}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="Alt+Space">Alt+Space</SelectItem>
+                    <SelectItem value="Ctrl+Shift+S">Ctrl+Shift+S</SelectItem>
+                    <SelectItem value="Ctrl+Space">Ctrl+Space</SelectItem>
+                    <SelectItem value="Alt+Shift+S">Alt+Shift+S</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
 
           </div>

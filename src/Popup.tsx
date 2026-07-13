@@ -1,0 +1,89 @@
+import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+
+interface Snippet {
+  id: number;
+  trigger: string;
+  expansion: string;
+  whole_word: boolean;
+  created_at: string;
+}
+
+function Popup() {
+  const [snippets, setSnippets] = useState<Snippet[]>([]);
+  const [query, setQuery] = useState("");
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    invoke<Snippet[]>("get_snippets").then(setSnippets);
+    inputRef.current?.focus();
+  }, []);
+
+  const filtered = snippets.filter((s) => {
+    const q = query.toLowerCase();
+    return s.trigger.toLowerCase().includes(q) || s.expansion.toLowerCase().includes(q);
+  });
+
+  useEffect(() => {
+    setSelectedIdx(0);
+  }, [query]);
+
+  async function select(idx: number) {
+    const s = filtered[idx];
+    if (!s) return;
+    await invoke("inject_from_popup", { expansion: s.expansion });
+    await getCurrentWindow().close();
+  }
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === "Escape") {
+      getCurrentWindow().close();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      select(selectedIdx);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedIdx((i) => (i > 0 ? i - 1 : filtered.length - 1));
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelectedIdx((i) => (i < filtered.length - 1 ? i + 1 : 0));
+    }
+  }
+
+  return (
+    <div className="flex h-screen flex-col bg-popover text-popover-foreground">
+      <input
+        ref={inputRef}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={handleKey}
+        placeholder="Search snippets..."
+        className="mx-3 mt-3 rounded-md border bg-background px-3 py-2 text-sm outline-none ring-ring focus:ring-2"
+      />
+      <div className="flex-1 overflow-y-auto py-2">
+        {filtered.length === 0 && (
+          <p className="px-4 py-6 text-center text-xs text-muted-foreground">
+            {snippets.length === 0 ? "No snippets yet" : "No matches"}
+          </p>
+        )}
+        {filtered.map((s, i) => (
+          <button
+            key={s.id}
+            className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent ${
+              i === selectedIdx ? "bg-accent text-accent-foreground" : ""
+            }`}
+            onClick={() => select(i)}
+            onMouseEnter={() => setSelectedIdx(i)}
+          >
+            <span className="font-mono text-xs font-medium text-primary">{s.trigger}</span>
+            <span className="truncate text-xs text-muted-foreground">{s.expansion}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default Popup;
