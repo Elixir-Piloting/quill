@@ -45,7 +45,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { PlusIcon, PencilIcon, Trash2Icon, Settings, Minus, Maximize2, Minimize2, X } from "lucide-react";
+import { PlusIcon, PencilIcon, Trash2Icon, Settings, Minus, Square, Copy, X } from "lucide-react";
 
 // ── Types ──
 
@@ -323,24 +323,24 @@ function App() {
   return (
     <div className="flex h-screen flex-col">
       {/* ═══ Custom titlebar ═══ */}
-      <header className="flex h-10 shrink-0 items-center justify-between bg-card px-3 ring-1 ring-foreground/5">
-        <div data-tauri-drag-region className="flex h-full flex-1 items-center gap-2">
-          <img src="/quill-icon.png" alt="Quill" className="size-5" />
-          <span className="font-heading text-sm font-semibold">Quill</span>
+      <header data-tauri-drag-region className="flex h-9 shrink-0 items-center justify-between bg-card pl-3 pr-1 ring-1 ring-foreground/5">
+        <div className="flex items-center gap-2">
+          <img src="/quill-icon.png" alt="Quill" className="size-4" />
+          <span className="font-heading text-xs font-semibold">Quill</span>
         </div>
-        <div className="flex items-center gap-0.5">
-          <Button variant="ghost" size="icon-xs" onClick={togglePause} title={paused ? "Resume" : "Pause"}>
+        <div className="flex items-center">
+          <Button variant={paused ? "secondary" : "ghost"} size="xs" onClick={togglePause}>
             {paused ? "Paused" : "Active"}
           </Button>
           <Button variant="ghost" size="icon-xs" onClick={() => setSettingsDlg(true)} title="Settings">
             <Settings />
           </Button>
-          <div className="mx-1 h-4 w-px bg-border" />
+          <div className="mx-0.5 h-3 w-px bg-border" />
           <Button variant="ghost" size="icon-xs" onClick={minimizeWindow} title="Minimize">
             <Minus />
           </Button>
           <Button variant="ghost" size="icon-xs" onClick={toggleMaximize} title={maximized ? "Restore" : "Maximize"}>
-            {maximized ? <Minimize2 /> : <Maximize2 />}
+            {maximized ? <Copy /> : <Square />}
           </Button>
           <Button variant="ghost" size="icon-xs" onClick={closeWindow} title="Close" className="hover:bg-destructive hover:text-destructive-foreground">
             <X />
