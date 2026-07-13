@@ -182,13 +182,14 @@ fn toggle_popup(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>
             let _ = popup.set_focus();
         }
     } else {
-        let _ = WebviewWindowBuilder::new(app, "search", WebviewUrl::App("index.html".into()))
+        let popup = WebviewWindowBuilder::new(app, "search", WebviewUrl::App("index.html".into()))
             .decorations(false)
             .always_on_top(true)
             .inner_size(400.0, 360.0)
             .center()
             .title("Quill Search")
             .build()?;
+        let _ = popup.set_focus();
     }
     Ok(())
 }

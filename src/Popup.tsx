@@ -17,12 +17,12 @@ function Popup() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const win = getCurrentWindow();
     invoke<Snippet[]>("get_snippets").then(setSnippets);
     inputRef.current?.focus();
-    const win = getCurrentWindow();
-    function onBlur() { win.close(); }
-    window.addEventListener("blur", onBlur);
-    return () => window.removeEventListener("blur", onBlur);
+    win.onFocusChanged(({ payload: focused }) => {
+      if (!focused) win.close();
+    });
   }, []);
 
   const filtered = snippets.filter((s) => {
