@@ -45,15 +45,15 @@ function Popup() {
   function handleKey(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
       getCurrentWindow().close();
-    } else if (e.key === "Enter") {
+    } else if (e.key === "ArrowDown" || e.key === "Tab") {
       e.preventDefault();
-      select(selectedIdx);
+      setSelectedIdx((i) => (i < filtered.length - 1 ? i + 1 : 0));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIdx((i) => (i > 0 ? i - 1 : filtered.length - 1));
-    } else if (e.key === "ArrowDown") {
+    } else if (e.key === "Enter") {
       e.preventDefault();
-      setSelectedIdx((i) => (i < filtered.length - 1 ? i + 1 : 0));
+      select(selectedIdx);
     }
   }
 
@@ -61,11 +61,12 @@ function Popup() {
     <div className="flex h-screen flex-col bg-popover text-popover-foreground">
       <input
         ref={inputRef}
+        autoFocus
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleKey}
         placeholder="Search snippets..."
-        className="mx-3 mt-3 rounded-md border bg-background px-3 py-2 text-sm outline-none ring-ring focus:ring-2"
+        className="mx-3 mt-3 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none ring-ring focus:ring-2"
       />
       <div className="flex-1 overflow-y-auto py-2">
         {filtered.length === 0 && (
@@ -76,8 +77,8 @@ function Popup() {
         {filtered.map((s, i) => (
           <button
             key={s.id}
-            className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent ${
-              i === selectedIdx ? "bg-accent text-accent-foreground" : ""
+            className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground ${
+              i === selectedIdx ? "bg-accent text-accent-foreground" : "text-popover-foreground"
             }`}
             onClick={() => select(i)}
             onMouseEnter={() => setSelectedIdx(i)}

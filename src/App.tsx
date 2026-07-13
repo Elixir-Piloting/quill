@@ -173,6 +173,7 @@ function App() {
 
   // Settings
   const [settingsDlg, setSettingsDlg] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'general' | 'hotkey' | 'about'>('general');
 
   // Confirm dialog
   const [confirmDlg, setConfirmDlg] = useState(false);
@@ -205,6 +206,10 @@ function App() {
     function handler(e: KeyboardEvent) {
       e.preventDefault();
       e.stopPropagation();
+      if (e.key === "Escape") {
+        setRecordingHotkey(false);
+        return;
+      }
       const mods: string[] = [];
       if (e.ctrlKey) mods.push("Ctrl");
       if (e.altKey) mods.push("Alt");
@@ -212,13 +217,12 @@ function App() {
       if (e.metaKey) mods.push("Super");
       let key = "";
       if (e.key === " ") key = "Space";
-      else if (e.key === "Escape") key = "Escape";
       else if (e.key === "Enter") key = "Enter";
       else if (e.key === "Tab") key = "Tab";
       else if (e.key.startsWith("F") && e.key.length <= 3) key = e.key;
       else if (e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) key = e.key.toUpperCase();
       else return;
-      if (mods.length === 0) return;
+      if (mods.length === 0 && !key.startsWith("F")) return;
       const combo = [...mods, key].join("+");
       setRecordingHotkey(false);
       changeHotkey(combo);
@@ -636,87 +640,111 @@ function App() {
       </Dialog>
 
       {/* ═══ Settings dialog ═══ */}
-      <Dialog open={settingsDlg} onOpenChange={setSettingsDlg}>
+      <Dialog open={settingsDlg} onOpenChange={(open) => { setSettingsDlg(open); if (open) setSettingsTab('general'); }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Settings</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-5 py-4">
-
-            {/* Theme */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Theme</label>
-              <div className="flex gap-2">
-                <Button variant={theme === 'system' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('system')}>System</Button>
-                <Button variant={theme === 'light' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('light')}>Light</Button>
-                <Button variant={theme === 'dark' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('dark')}>Dark</Button>
-              </div>
-            </div>
-
-            {/* Close to system tray */}
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="text-sm font-medium">Close to tray</span>
-                <span className="text-xs text-muted-foreground">Minimize to tray instead of quitting</span>
-              </div>
-              <Button variant={closeToTray ? 'default' : 'outline'} size="sm" onClick={() => setCloseToTray(!closeToTray)}>
-                {closeToTray ? 'On' : 'Off'}
-              </Button>
-            </div>
-
-            {/* Run on boot */}
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="text-sm font-medium">Run on boot</span>
-                <span className="text-xs text-muted-foreground">Auto-start Quill when you log in</span>
-              </div>
-              <Button variant={runOnBoot ? 'default' : 'outline'} size="sm" onClick={() => setRunOnBoot(!runOnBoot)}>
-                {runOnBoot ? 'On' : 'Off'}
-              </Button>
-            </div>
-
-            {/* Boot priority */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Boot priority</label>
-              <div className="flex gap-2">
-                <Button variant={bootPriority === 'low' ? 'default' : 'outline'} size="sm" onClick={() => setBootPriority('low')}>Low</Button>
-                <Button variant={bootPriority === 'normal' ? 'default' : 'outline'} size="sm" onClick={() => setBootPriority('normal')}>Normal</Button>
-                <Button variant={bootPriority === 'high' ? 'default' : 'outline'} size="sm" onClick={() => setBootPriority('high')}>High</Button>
-              </div>
-            </div>
-
-            {/* Search hotkey */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Search popup hotkey</label>
-              <div
-                className={`flex h-8 items-center rounded-md border px-3 font-mono text-xs cursor-pointer ${
-                  recordingHotkey
-                    ? "border-dashed text-muted-foreground"
-                    : "bg-background hover:bg-accent"
-                }`}
-                onClick={startRecording}
-              >
-                {recordingHotkey ? "Press a key combination…" : hotkey}
-              </div>
-            </div>
-
+          <div className="flex gap-1 rounded-lg bg-muted p-1">
+            <button
+              className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${settingsTab === 'general' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+              onClick={() => setSettingsTab('general')}
+            >General</button>
+            <button
+              className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${settingsTab === 'hotkey' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+              onClick={() => setSettingsTab('hotkey')}
+            >Hotkey</button>
+            <button
+              className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${settingsTab === 'about' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+              onClick={() => setSettingsTab('about')}
+            >About</button>
           </div>
 
-          {/* About */}
-          <div className="border-t pt-4 flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Quill by <strong>Elixir-Piloting</strong></span>
-              <a href="https://github.com/Elixir-Piloting" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
-                GitHub <ExternalLink className="size-3" />
-              </a>
+          {settingsTab === 'general' && (
+            <div className="flex flex-col gap-5 py-2">
+
+              {/* Theme */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Theme</label>
+                <div className="flex gap-2">
+                  <Button variant={theme === 'system' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('system')}>System</Button>
+                  <Button variant={theme === 'light' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('light')}>Light</Button>
+                  <Button variant={theme === 'dark' ? 'default' : 'outline'} size="sm" onClick={() => setTheme('dark')}>Dark</Button>
+                </div>
+              </div>
+
+              {/* Close to system tray */}
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">Close to tray</span>
+                  <span className="text-xs text-muted-foreground">Minimize to tray instead of quitting</span>
+                </div>
+                <Button variant={closeToTray ? 'default' : 'outline'} size="sm" onClick={() => setCloseToTray(!closeToTray)}>
+                  {closeToTray ? 'On' : 'Off'}
+                </Button>
+              </div>
+
+              {/* Run on boot */}
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">Run on boot</span>
+                  <span className="text-xs text-muted-foreground">Auto-start Quill when you log in</span>
+                </div>
+                <Button variant={runOnBoot ? 'default' : 'outline'} size="sm" onClick={() => setRunOnBoot(!runOnBoot)}>
+                  {runOnBoot ? 'On' : 'Off'}
+                </Button>
+              </div>
+
+              {/* Boot priority */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Boot priority</label>
+                <div className="flex gap-2">
+                  <Button variant={bootPriority === 'low' ? 'default' : 'outline'} size="sm" onClick={() => setBootPriority('low')}>Low</Button>
+                  <Button variant={bootPriority === 'normal' ? 'default' : 'outline'} size="sm" onClick={() => setBootPriority('normal')}>Normal</Button>
+                  <Button variant={bootPriority === 'high' ? 'default' : 'outline'} size="sm" onClick={() => setBootPriority('high')}>High</Button>
+                </div>
+              </div>
+
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">v0.1.0</span>
-              <Button variant="outline" size="xs" onClick={checkForUpdates} disabled={updateState === 'checking'}>
-                {updateState === 'checking' ? 'Checking...' : 'Check for Updates'}
-              </Button>
+          )}
+
+          {settingsTab === 'hotkey' && (
+            <div className="flex flex-col gap-5 py-2">
+
+              {/* Search hotkey */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Search popup hotkey</label>
+                <div
+                  className={`flex h-8 items-center rounded-md border px-3 font-mono text-xs cursor-pointer ${
+                    recordingHotkey
+                      ? "border-dashed text-muted-foreground"
+                      : "bg-background hover:bg-accent"
+                  }`}
+                  onClick={startRecording}
+                >
+                  {recordingHotkey ? "Press a key combination…" : hotkey}
+                </div>
+              </div>
+
             </div>
-          </div>
+          )}
+
+          {settingsTab === 'about' && (
+            <div className="flex flex-col gap-5 py-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Quill by <strong>Elixir-Piloting</strong></span>
+                <a href="https://github.com/Elixir-Piloting" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
+                  GitHub <ExternalLink className="size-3" />
+                </a>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">v0.1.0</span>
+                <Button variant="outline" size="xs" onClick={checkForUpdates} disabled={updateState === 'checking'}>
+                  {updateState === 'checking' ? 'Checking...' : 'Check for Updates'}
+                </Button>
+              </div>
+            </div>
+          )}
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
