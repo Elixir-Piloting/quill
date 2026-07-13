@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
+  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
@@ -43,7 +45,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { PlusIcon, PencilIcon, Trash2Icon, Settings } from "lucide-react";
+import { PlusIcon, PencilIcon, Trash2Icon, Settings, Minus, Maximize2, Minimize2, X } from "lucide-react";
 
 // ── Types ──
 
@@ -180,6 +182,20 @@ function App() {
     }
   }, [theme]);
 
+  // ── Window controls ──
+  const appWindow = getCurrentWindow();
+  const [maximized, setMaximized] = useState(false);
+
+  useEffect(() => {
+    appWindow.isMaximized().then(setMaximized);
+    const unlisten = appWindow.onResized(() => { appWindow.isMaximized().then(setMaximized); });
+    return () => { unlisten.then((f) => f()); };
+  }, []);
+
+  function minimizeWindow() { appWindow.minimize(); }
+  function toggleMaximize() { appWindow.toggleMaximize(); }
+  function closeWindow() { appWindow.close(); }
+
   // ── Snippets ──
 
   async function loadSnippets() {
@@ -227,11 +243,6 @@ function App() {
     }
     setConfirmDlg(false);
     setPendingDelete(null);
-  }
-
-  async function deleteSnippet(id: number) {
-    await invoke("delete_snippet", { id });
-    loadSnippets();
   }
 
   function insertVariable(name: string) {
@@ -289,11 +300,6 @@ function App() {
     loadVariables();
   }
 
-  async function deleteVariable(id: number) {
-    await invoke("delete_variable", { id });
-    loadVariables();
-  }
-
   // ── Pause ──
 
   async function togglePause() {
@@ -315,31 +321,46 @@ function App() {
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
-      {/* ═══ Header ═══ */}
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <img src="/quill-icon.png" alt="Quill" className="size-7" />
-          <h1 className="font-heading text-xl font-semibold">Quill</h1>
+    <div className="flex h-screen flex-col">
+      {/* ═══ Custom titlebar ═══ */}
+      <header className="flex h-10 shrink-0 items-center justify-between bg-card px-3 ring-1 ring-foreground/5">
+        <div data-tauri-drag-region className="flex h-full flex-1 items-center gap-2">
+          <img src="/quill-icon.png" alt="Quill" className="size-5" />
+          <span className="font-heading text-sm font-semibold">Quill</span>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant={paused ? "secondary" : "default"} onClick={togglePause}>
+        <div className="flex items-center gap-0.5">
+          <Button variant="ghost" size="icon-xs" onClick={togglePause} title={paused ? "Resume" : "Pause"}>
             {paused ? "Paused" : "Active"}
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => setSettingsDlg(true)}>
+          <Button variant="ghost" size="icon-xs" onClick={() => setSettingsDlg(true)} title="Settings">
             <Settings />
+          </Button>
+          <div className="mx-1 h-4 w-px bg-border" />
+          <Button variant="ghost" size="icon-xs" onClick={minimizeWindow} title="Minimize">
+            <Minus />
+          </Button>
+          <Button variant="ghost" size="icon-xs" onClick={toggleMaximize} title={maximized ? "Restore" : "Maximize"}>
+            {maximized ? <Minimize2 /> : <Maximize2 />}
+          </Button>
+          <Button variant="ghost" size="icon-xs" onClick={closeWindow} title="Close" className="hover:bg-destructive hover:text-destructive-foreground">
+            <X />
           </Button>
         </div>
       </header>
 
+      {/* ═══ Main content ═══ */}
+      <div className="mx-auto flex max-w-3xl flex-1 flex-col gap-6 overflow-y-auto p-6">
+
       {/* ═══ Snippet list ═══ */}
       <Card>
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader>
           <CardTitle>Snippets</CardTitle>
-          <Button size="xs" onClick={openNewSnippet}>
-            <PlusIcon data-icon="start" />
-            Add Snippet
-          </Button>
+          <CardAction>
+            <Button size="xs" onClick={openNewSnippet}>
+              <PlusIcon data-icon="start" />
+              Add Snippet
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
           {snippets.length === 0 ? (
@@ -424,12 +445,14 @@ function App() {
 
       {/* ═══ Variable list ═══ */}
       <Card>
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader>
           <CardTitle>Variables</CardTitle>
-          <Button size="xs" onClick={openNewVariable}>
-            <PlusIcon data-icon="start" />
-            Add Variable
-          </Button>
+          <CardAction>
+            <Button size="xs" onClick={openNewVariable}>
+              <PlusIcon data-icon="start" />
+              Add Variable
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
           {variables.length === 0 ? (
@@ -469,7 +492,7 @@ function App() {
       </Card>
 
       {/* ═══ Confirm delete dialog ═══ */}
-      <Dialog open={confirmDlg} onOpenChange={(open) => { if (!open) setPendingDelete(null); }}>
+      <Dialog open={confirmDlg} onOpenChange={(open) => { if (!open) { setConfirmDlg(false); setPendingDelete(null); } }}>
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
             <DialogTitle>Delete {pendingDelete?.type === 'snippet' ? 'snippet' : 'variable'}?</DialogTitle>
@@ -577,6 +600,7 @@ function App() {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
     </div>
   );
 }
