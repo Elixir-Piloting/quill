@@ -330,7 +330,7 @@ function App() {
         </div>
         <div className="flex items-center">
           <Button variant={paused ? "outline" : "default"} size="xs" onClick={togglePause}>
-            <span className={`size-1.5 rounded-full ${paused ? "bg-muted-foreground" : "bg-primary-foreground"}`} />
+            <span className={`size-1.5 rounded-full ${paused ? "bg-destructive" : "bg-primary-foreground"}`} />
             {paused ? "Paused" : "Active"}
           </Button>
           <Button variant="ghost" size="icon-xs" onClick={() => setSettingsDlg(true)} title="Settings">
