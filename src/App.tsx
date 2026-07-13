@@ -43,6 +43,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
+
 import { PlusIcon, PencilIcon, Trash2Icon } from "lucide-react";
 
 // ── Types ──
@@ -451,18 +460,24 @@ function App() {
               {varKind === "date" && (
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="var-date-fmt" className="text-xs font-medium text-muted-foreground">Date format</label>
-                  <Select value={varDateFmt} onValueChange={(v) => { if (v) setVarDateFmt(v); }}>
-                    <SelectTrigger id="var-date-fmt">
-                      <SelectValue placeholder="Select a format…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {DATE_FORMATS.map((f) => (
-                          <SelectItem key={f.pattern} value={f.pattern}>{previewDate(f.pattern)}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                  <Combobox<DateFormatOption>
+                    items={DATE_FORMATS}
+                    value={DATE_FORMATS.find((f) => f.pattern === varDateFmt) ?? null}
+                    onValueChange={(item) => setVarDateFmt(item?.pattern ?? "")}
+                    itemToStringValue={(item) => previewDate(item.pattern)}
+                  >
+                    <ComboboxInput id="var-date-fmt" placeholder="Search date formats…" />
+                    <ComboboxContent>
+                      <ComboboxEmpty>No formats found.</ComboboxEmpty>
+                      <ComboboxList>
+                        {(item) => (
+                          <ComboboxItem key={item.pattern} value={item}>
+                            {previewDate(item.pattern)}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
                   {varDateFmt && (
                     <p className="text-xs text-muted-foreground">Preview: {previewDate(varDateFmt)}</p>
                   )}
