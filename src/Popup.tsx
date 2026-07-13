@@ -78,8 +78,8 @@ function Popup() {
               key={s.id}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                 i === selectedIdx
-                  ? "bg-card text-card-foreground shadow-xs"
-                  : "hover:bg-card/60 text-popover-foreground"
+                  ? "bg-accent text-accent-foreground"
+                  : "text-popover-foreground hover:bg-accent/30"
               }`}
               onClick={() => select(i)}
               onMouseEnter={() => setSelectedIdx(i)}
