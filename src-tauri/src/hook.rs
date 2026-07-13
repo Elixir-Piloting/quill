@@ -57,10 +57,14 @@ pub fn start_hook(state: Arc<AppState>) {
                         let has_form = match state.db.lock() {
                             Ok(conn) => {
                                 let form_inputs = db::get_all_form_inputs(&conn).unwrap_or_default();
-                                let referenced: Vec<_> = form_inputs
-                                    .into_iter()
-                                    .filter(|f| expansion.contains(&format!("{{{}}}", f.name)))
-                                    .collect();
+                                let referenced = {
+                                    let mut v: Vec<_> = form_inputs
+                                        .into_iter()
+                                        .filter(|f| expansion.contains(&format!("{{{}}}", f.name)))
+                                        .collect();
+                                    v.sort_by_key(|f| expansion.find(&format!("{{{}}}", f.name)).unwrap_or(usize::MAX));
+                                    v
+                                };
                                 if !referenced.is_empty() {
                                     if let Ok(mut pf) = state.pending_form.lock() {
                                         *pf = Some(crate::state::PendingFormData {
