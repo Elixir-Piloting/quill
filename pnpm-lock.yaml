@@ -14,6 +14,9 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.2.9
         version: 5.2.9
+      '@fontsource/architects-daughter':
+        specifier: ^5.2.7
+        version: 5.2.7
       '@tailwindcss/vite':
         specifier: ^4.3.2
         version: 4.3.2(vite@7.3.6(jiti@2.7.0)(lightningcss@1.32.0))
@@ -424,6 +427,9 @@ packages:
 
   '@fontsource-variable/geist@5.2.9':
     resolution: {integrity: sha512-TP+QSBG3wxKGPE33CbMy/L0Nu3qvJ6Fy81Yc4LnQ95xH+i+cfEp8fyU8/kfV14YwszxIFPhnoMTbjL71waVpyQ==}
+
+  '@fontsource/architects-daughter@5.2.7':
+    resolution: {integrity: sha512-W7tHXduV9kRQZDTqcU4Rnc/GtSq9cYUHOnhvcRPjy87u5x/oRqKXPU2PghqbktTECOIh1N0qVZLt9rwqa+aWhg==}
 
   '@hono/node-server@1.19.14':
     resolution: {integrity: sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw==}
@@ -2420,6 +2426,8 @@ snapshots:
   '@floating-ui/utils@0.2.12': {}
 
   '@fontsource-variable/geist@5.2.9': {}
+
+  '@fontsource/architects-daughter@5.2.7': {}
 
   '@hono/node-server@1.19.14(hono@4.12.30)':
     dependencies:
