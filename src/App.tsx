@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isEnabled as autoStartIsEnabled, enable as autoStartEnable, disable as autoStartDisable } from "@tauri-apps/plugin-autostart";
 import Popup from "./Popup";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -261,7 +262,11 @@ function App() {
   }
 
   useEffect(() => { localStorage.setItem('quill-close-to-tray', String(closeToTray)); }, [closeToTray]);
-  useEffect(() => { localStorage.setItem('quill-run-on-boot', String(runOnBoot)); }, [runOnBoot]);
+  useEffect(() => {
+    localStorage.setItem('quill-run-on-boot', String(runOnBoot));
+    if (runOnBoot) { autoStartEnable().catch(() => {}); }
+    else { autoStartDisable().catch(() => {}); }
+  }, [runOnBoot]);
   useEffect(() => { localStorage.setItem('quill-boot-priority', bootPriority); }, [bootPriority]);
 
   // Variables
@@ -278,6 +283,7 @@ function App() {
     loadSnippets();
     loadVariables();
     invoke<boolean>("get_paused").then(setPaused);
+    autoStartIsEnabled().then((enabled) => setRunOnBoot(enabled)).catch(() => {});
     const unlisten = listen<boolean>("paused-changed", (e) => setPaused(e.payload));
     return () => { unlisten.then((f) => f()); };
   }, []);
