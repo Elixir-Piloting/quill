@@ -1,7 +1,7 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder},
+    menu::MenuItemBuilder,
     tray::TrayIconBuilder,
     AppHandle, Emitter, Manager,
 };
@@ -9,11 +9,12 @@ use tauri::{
 use crate::state::AppState;
 
 pub fn setup_tray(app: &AppHandle, state: Arc<AppState>) -> tauri::Result<()> {
-    let open = MenuItemBuilder::with_id("open_settings", "Open Settings").build(app)?;
-    let toggle = MenuItemBuilder::with_id("toggle_pause", "Pause").build(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+    let open = tauri::menu::MenuItemBuilder::with_id("open_settings", "Open Settings").build(app)?;
+    let initial_label = if state.paused.load(Ordering::SeqCst) { "Resume" } else { "Pause" };
+    let toggle = MenuItemBuilder::with_id("toggle_pause", initial_label).build(app)?;
+    let quit = tauri::menu::MenuItemBuilder::with_id("quit", "Quit").build(app)?;
 
-    let menu = MenuBuilder::new(app)
+    let menu = tauri::menu::MenuBuilder::new(app)
         .items(&[&open, &toggle, &quit])
         .build()?;
 
@@ -22,6 +23,8 @@ pub fn setup_tray(app: &AppHandle, state: Arc<AppState>) -> tauri::Result<()> {
     } else {
         "Quill — Active"
     };
+
+    let toggle_captured = toggle.clone();
 
     TrayIconBuilder::with_id("main")
         .menu(&menu)
@@ -39,6 +42,8 @@ pub fn setup_tray(app: &AppHandle, state: Arc<AppState>) -> tauri::Result<()> {
                     let was_paused = s.paused.fetch_xor(true, Ordering::SeqCst);
                     let now = !was_paused;
                     let _ = app.emit("paused-changed", now);
+                    let label = if now { "Resume" } else { "Pause" };
+                    let _ = toggle_captured.set_text(label);
                     if let Some(tray) = app.tray_by_id("main") {
                         let tip = if now { "Quill — Paused" } else { "Quill — Active" };
                         let _ = tray.set_tooltip(Some(tip));
