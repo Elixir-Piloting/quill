@@ -24,10 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
-  CardAction,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Dialog,
@@ -125,6 +122,9 @@ function previewDate(pattern: string): string {
 
 function App() {
   const [paused, setPaused] = useState(false);
+
+  // Tabs
+  const [tab, setTab] = useState<'snippets' | 'variables'>('snippets');
 
   // Snippets
   const [snippets, setSnippets] = useState<Snippet[]>([]);
@@ -404,53 +404,98 @@ function App() {
       </header>
 
       {/* ═══ Main content ═══ */}
-      <div className="mx-auto flex max-w-3xl flex-1 flex-col gap-6 overflow-y-auto p-6">
+      <div className="mx-auto flex max-w-3xl flex-1 flex-col overflow-hidden p-6">
 
-      {/* ═══ Snippet list ═══ */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Snippets</CardTitle>
-          <CardAction>
-            <Button size="xs" onClick={openNewSnippet}>
-              <PlusIcon data-icon="start" />
-              Add Snippet
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          {snippets.length === 0 ? (
-            <p className="py-4 text-sm text-muted-foreground">No snippets yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Trigger</TableHead>
-                  <TableHead>Expansion</TableHead>
-                  <TableHead className="w-0 text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {snippets.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-mono text-xs">{s.trigger}</TableCell>
-                    <TableCell className="max-w-72 truncate text-muted-foreground">{truncate(s.expansion, 60)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="outline" size="xs" onClick={() => openEditSnippet(s)}>
-                          <PencilIcon />Edit
-                        </Button>
-                        <Button variant="destructive" size="xs" onClick={() => requestDelete('snippet', s.id, s.trigger)}>
-                          <Trash2Icon />Delete
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+        {/* Tabs */}
+        <div className="flex shrink-0 items-center justify-between mb-4">
+          <div className="flex gap-1">
+            <Button variant={tab === 'snippets' ? 'default' : 'outline'} size="sm" onClick={() => setTab('snippets')}>Snippets</Button>
+            <Button variant={tab === 'variables' ? 'default' : 'outline'} size="sm" onClick={() => setTab('variables')}>Variables</Button>
+          </div>
+          <Button size="sm" onClick={tab === 'snippets' ? openNewSnippet : openNewVariable}>
+            <PlusIcon data-icon="start" />
+            Add {tab === 'snippets' ? 'Snippet' : 'Variable'}
+          </Button>
+        </div>
+
+        {/* Tab content */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+        {tab === 'snippets' ? (
+          <Card>
+            <CardContent>
+              {snippets.length === 0 ? (
+                <p className="py-4 text-sm text-muted-foreground">No snippets yet.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Trigger</TableHead>
+                      <TableHead>Expansion</TableHead>
+                      <TableHead className="w-0 text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {snippets.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-mono text-xs">{s.trigger}</TableCell>
+                        <TableCell className="max-w-72 truncate text-muted-foreground">{truncate(s.expansion, 60)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button variant="outline" size="xs" onClick={() => openEditSnippet(s)}>
+                              <PencilIcon />Edit
+                            </Button>
+                            <Button variant="destructive" size="xs" onClick={() => requestDelete('snippet', s.id, s.trigger)}>
+                              <Trash2Icon />Delete
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent>
+              {variables.length === 0 ? (
+                <p className="py-4 text-sm text-muted-foreground">No variables yet.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Value</TableHead>
+                      <TableHead className="w-0 text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {variables.map((v) => (
+                      <TableRow key={v.id}>
+                        <TableCell className="font-mono text-xs">{`{${v.name}}`}</TableCell>
+                        <TableCell><Badge variant="secondary">{kindLabel(v.kind)}</Badge></TableCell>
+                        <TableCell className="max-w-56 truncate text-muted-foreground">{varDisplay(v)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button variant="outline" size="xs" onClick={() => openEditVariable(v)}>
+                              <PencilIcon />Edit
+                            </Button>
+                            <Button variant="destructive" size="xs" onClick={() => requestDelete('variable', v.id, `{${v.name}}`)}>
+                              <Trash2Icon />Delete
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
+        </div>
 
       {/* ═══ Snippet dialog ═══ */}
       <Dialog open={snippetDlg} onOpenChange={setSnippetDlg}>
@@ -497,54 +542,6 @@ function App() {
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* ═══ Variable list ═══ */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Variables</CardTitle>
-          <CardAction>
-            <Button size="xs" onClick={openNewVariable}>
-              <PlusIcon data-icon="start" />
-              Add Variable
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          {variables.length === 0 ? (
-            <p className="py-4 text-sm text-muted-foreground">No variables yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Value</TableHead>
-                  <TableHead className="w-0 text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {variables.map((v) => (
-                  <TableRow key={v.id}>
-                    <TableCell className="font-mono text-xs">{`{${v.name}}`}</TableCell>
-                    <TableCell><Badge variant="secondary">{kindLabel(v.kind)}</Badge></TableCell>
-                    <TableCell className="max-w-56 truncate text-muted-foreground">{varDisplay(v)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="outline" size="xs" onClick={() => openEditVariable(v)}>
-                          <PencilIcon />Edit
-                        </Button>
-                        <Button variant="destructive" size="xs" onClick={() => requestDelete('variable', v.id, `{${v.name}}`)}>
-                          <Trash2Icon />Delete
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
 
       {/* ═══ Confirm delete dialog ═══ */}
       <Dialog open={confirmDlg} onOpenChange={(open) => { if (!open) { setConfirmDlg(false); setPendingDelete(null); } }}>
