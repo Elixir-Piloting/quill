@@ -3,7 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isEnabled as autoStartIsEnabled, enable as autoStartEnable, disable as autoStartDisable } from "@tauri-apps/plugin-autostart";
+import { check } from "@tauri-apps/plugin-updater";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { X } from "lucide-react";
 import Popup from "./Popup";
 import FormPopup from "./FormPopup";
 import Titlebar from "./components/Titlebar";
@@ -101,6 +103,10 @@ function AppShell() {
 
   // Settings
   const [settingsDlg, setSettingsDlg] = useState(false);
+  const [settingsDefaultTab, setSettingsDefaultTab] = useState<"general" | "hotkey" | "about">("general");
+
+  // Update toast
+  const [updateToast, setUpdateToast] = useState<{ version: string; body?: string } | null>(null);
 
   // Settings state
   const [closeToTray, setCloseToTray] = useState(() => localStorage.getItem("quill-close-to-tray") !== "false");
@@ -133,6 +139,9 @@ function AppShell() {
     loadVariables();
     invoke<boolean>("get_paused").then(setPaused);
     autoStartIsEnabled().then((enabled) => setRunOnBoot(enabled)).catch(() => {});
+    check().then((update) => {
+      if (update) setUpdateToast({ version: update.version, body: update.body });
+    }).catch(() => {});
     const unlisten = listen<boolean>("paused-changed", (e) => setPaused(e.payload));
     return () => { unlisten.then((f) => f()); };
   }, []);
@@ -141,14 +150,40 @@ function AppShell() {
     setPaused(await invoke<boolean>("toggle_paused"));
   }
 
+  function openSettingsToAbout() {
+    setSettingsDefaultTab("about");
+    setSettingsDlg(true);
+  }
+
   return (
     <div className="flex h-screen flex-col">
       <Titlebar paused={paused} closeToTray={closeToTray} onTogglePause={togglePause} onOpenSettings={() => setSettingsDlg(true)} />
 
       <MainPage snippets={snippets} variables={variables} onRefreshSnippets={loadSnippets} onRefreshVariables={loadVariables} />
 
+      {updateToast && (
+        <div className="fixed bottom-4 right-4 z-50 flex w-80 items-start gap-3 rounded-xl border bg-popover p-4 shadow-xl ring-1 ring-border">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">Update {updateToast.version} available</p>
+            {updateToast.body && (
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{updateToast.body}</p>
+            )}
+            <button
+              onClick={() => { openSettingsToAbout(); }}
+              className="mt-2 text-xs font-medium text-primary hover:underline"
+            >
+              See Update
+            </button>
+          </div>
+          <button onClick={() => setUpdateToast(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
       <SettingsModal
         open={settingsDlg}
+        defaultTab={settingsDefaultTab}
         onClose={() => setSettingsDlg(false)}
         theme={theme}
         onChangeTheme={setTheme}

@@ -17,12 +17,33 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 use db::{Folder, FormInput, Snippet, Variable};
 use state::AppState;
 
+fn friendly_error(e: impl ToString) -> String {
+    let msg = e.to_string();
+    if msg.contains("UNIQUE constraint failed") {
+        if msg.contains("snippets.trigger") {
+            "Trigger already exists".into()
+        } else if msg.contains("variables.name") {
+            "Variable name already exists".into()
+        } else if msg.contains("form_inputs.name") {
+            "Form input name already exists".into()
+        } else if msg.contains("folders.name") {
+            "A folder with this name already exists".into()
+        } else {
+            msg
+        }
+    } else if msg.contains("SqliteFailure") && msg.to_lowercase().contains("unique") {
+        "This name is already taken".into()
+    } else {
+        msg
+    }
+}
+
 // ── Snippet commands ──
 
 #[tauri::command]
 fn get_snippets(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<Snippet>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::get_all_snippets(&conn).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::get_all_snippets(&conn).map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -34,9 +55,9 @@ fn add_snippet(
     app_scope: String,
     folder_id: Option<i64>,
 ) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let conn = state.db.lock().map_err(friendly_error)?;
     db::add_snippet(&conn, &trigger, &expansion, whole_word, &app_scope, folder_id)
-        .map_err(|e| e.to_string())
+        .map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -49,9 +70,9 @@ fn update_snippet(
     app_scope: String,
     folder_id: Option<i64>,
 ) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let conn = state.db.lock().map_err(friendly_error)?;
     db::update_snippet(&conn, id, &trigger, &expansion, whole_word, &app_scope, folder_id)
-        .map_err(|e| e.to_string())
+        .map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -59,16 +80,16 @@ fn delete_snippet(
     state: tauri::State<'_, Arc<AppState>>,
     id: i64,
 ) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::delete_snippet(&conn, id).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::delete_snippet(&conn, id).map_err(friendly_error)
 }
 
 // ── Folder commands ──
 
 #[tauri::command]
 fn get_folders(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<Folder>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::get_all_folders(&conn).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::get_all_folders(&conn).map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -77,8 +98,8 @@ fn add_folder(
     name: String,
     color: String,
 ) -> Result<i64, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::add_folder(&conn, &name, &color).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::add_folder(&conn, &name, &color).map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -88,8 +109,8 @@ fn update_folder(
     name: String,
     color: String,
 ) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::update_folder(&conn, id, &name, &color).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::update_folder(&conn, id, &name, &color).map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -97,16 +118,16 @@ fn delete_folder(
     state: tauri::State<'_, Arc<AppState>>,
     id: i64,
 ) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::delete_folder(&conn, id).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::delete_folder(&conn, id).map_err(friendly_error)
 }
 
 // ── Variable commands ──
 
 #[tauri::command]
 fn get_variables(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<Variable>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::get_all_variables(&conn).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::get_all_variables(&conn).map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -117,8 +138,8 @@ fn add_variable(
     kind: String,
     folder_id: Option<i64>,
 ) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::add_variable(&conn, &name, &value, &kind, folder_id).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::add_variable(&conn, &name, &value, &kind, folder_id).map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -130,8 +151,8 @@ fn update_variable(
     kind: String,
     folder_id: Option<i64>,
 ) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::update_variable(&conn, id, &name, &value, &kind, folder_id).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::update_variable(&conn, id, &name, &value, &kind, folder_id).map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -139,16 +160,16 @@ fn delete_variable(
     state: tauri::State<'_, Arc<AppState>>,
     id: i64,
 ) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::delete_variable(&conn, id).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::delete_variable(&conn, id).map_err(friendly_error)
 }
 
 // ── Form Input commands ──
 
 #[tauri::command]
 fn get_form_inputs(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<FormInput>, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::get_all_form_inputs(&conn).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::get_all_form_inputs(&conn).map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -162,8 +183,8 @@ fn add_form_input(
     required: bool,
     folder_id: Option<i64>,
 ) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::add_form_input(&conn, &name, &label, &fieldType, &placeholder, &defaultValue, required, folder_id).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::add_form_input(&conn, &name, &label, &fieldType, &placeholder, &defaultValue, required, folder_id).map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -178,8 +199,8 @@ fn update_form_input(
     required: bool,
     folder_id: Option<i64>,
 ) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::update_form_input(&conn, id, &name, &label, &fieldType, &placeholder, &defaultValue, required, folder_id).map_err(|e| e.to_string())
+    let conn = state.db.lock().map_err(friendly_error)?;
+    db::update_form_input(&conn, id, &name, &label, &fieldType, &placeholder, &defaultValue, required, folder_id).map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -265,8 +286,8 @@ fn install_starter_pack(
     state: tauri::State<'_, Arc<AppState>>,
     name: String,
 ) -> Result<starter::StarterPackResult, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    starter::install_pack(&conn, &name)
+    let conn = state.db.lock().map_err(friendly_error)?;
+    starter::install_pack(&conn, &name).map_err(friendly_error)
 }
 
 // ── Import/Export commands ──
@@ -297,8 +318,8 @@ fn execute_import(
     mode: String,
 ) -> Result<export::ImportResult, String> {
     let json = export::read_import_json(&path)?;
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    export::execute_import(&conn, &json, &mode)
+    let conn = state.db.lock().map_err(friendly_error)?;
+    export::execute_import(&conn, &json, &mode).map_err(friendly_error)
 }
 
 // ── Popup commands ──
@@ -363,6 +384,15 @@ fn close_and_inject(trigger: String, expansion: String, state: tauri::State<'_, 
 #[tauri::command]
 fn cancel_injection(state: tauri::State<'_, Arc<AppState>>) {
     state.cancelling.store(true, Ordering::SeqCst);
+}
+
+// ── Font command ──
+
+#[tauri::command]
+fn get_system_fonts() -> Vec<String> {
+    font_kit::source::SystemSource::new()
+        .all_families()
+        .unwrap_or_default()
 }
 
 #[tauri::command]

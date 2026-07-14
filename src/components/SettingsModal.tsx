@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
@@ -9,8 +9,11 @@ import HotkeyRecorder from "./HotkeyRecorder";
 
 type Theme = "system" | "light" | "dark";
 
+type Tab = "general" | "hotkey" | "about";
+
 interface Props {
   open: boolean;
+  defaultTab?: Tab;
   onClose: () => void;
   theme: Theme;
   onChangeTheme: (t: Theme) => void;
@@ -24,8 +27,6 @@ interface Props {
   onChangeHotkey: (hk: string) => void;
   onRefreshSnippets: () => void;
 }
-
-type Tab = "general" | "hotkey" | "about";
 
 interface ImportPreview {
   snippet_count: number;
@@ -64,7 +65,11 @@ const starterPacks: StarterPackInfo[] = [
 ];
 
 function SettingsModal(props: Props) {
-  const [tab, setTab] = useState<Tab>("general");
+  const [tab, setTab] = useState<Tab>(props.defaultTab || "general");
+
+  useEffect(() => {
+    if (props.open && props.defaultTab) setTab(props.defaultTab);
+  }, [props.open, props.defaultTab]);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importMode, setImportMode] = useState<"merge" | "replace">("merge");
   const [replaceConfirmed, setReplaceConfirmed] = useState(false);

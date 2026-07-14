@@ -197,7 +197,8 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   const [appScope, setAppScope] = useState<RunningApp[]>([]);
   const [scopeEnabled, setScopeEnabled] = useState(false);
   const [runningApps, setRunningApps] = useState<RunningApp[]>([]);
-  const [snippetError, setSnippetError] = useState("");
+  const [triggerError, setTriggerError] = useState("");
+  const [expansionError, setExpansionError] = useState("");
   const expansionRef = useRef<HTMLTextAreaElement>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -226,7 +227,8 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
     setSnippetFolderId(selectedFolderId ?? uncategorizedFolderId);
     setAppScope([]);
     setScopeEnabled(false);
-    setSnippetError("");
+    setTriggerError("");
+    setExpansionError("");
     fetchRunningApps();
     setSnippetDlg(true);
   }
@@ -242,7 +244,8 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
     })();
     setAppScope(scope);
     setScopeEnabled(scope.length > 0);
-    setSnippetError("");
+    setTriggerError("");
+    setExpansionError("");
     fetchRunningApps();
     setSnippetDlg(true);
     loadFormInputs();
@@ -256,18 +259,23 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   }
 
   async function saveSnippet() {
-    if (!trigger.trim() || !expansion.trim()) return;
+    const trimmedTrigger = trigger.trim();
+    const trimmedExp = expansion.trim();
+    let hasError = false;
+    if (!trimmedTrigger) { setTriggerError("Required"); hasError = true; }
+    if (!trimmedExp) { setExpansionError("Required"); hasError = true; }
+    if (hasError) return;
     const appScopeStr = JSON.stringify(scopeEnabled ? appScope : []);
     try {
       if (editingSnip) {
-        await invoke("update_snippet", { id: editingSnip.id, trigger: trigger.trim(), expansion: expansion.trim(), wholeWord, appScope: appScopeStr, folderId: snippetFolderId });
+        await invoke("update_snippet", { id: editingSnip.id, trigger: trimmedTrigger, expansion: trimmedExp, wholeWord, appScope: appScopeStr, folderId: snippetFolderId });
       } else {
-        await invoke("add_snippet", { trigger: trigger.trim(), expansion: expansion.trim(), wholeWord, appScope: appScopeStr, folderId: snippetFolderId });
+        await invoke("add_snippet", { trigger: trimmedTrigger, expansion: trimmedExp, wholeWord, appScope: appScopeStr, folderId: snippetFolderId });
       }
       setSnippetDlg(false);
       onRefreshSnippets();
     } catch (e) {
-      setSnippetError(String(e));
+      setTriggerError(String(e));
     }
   }
 
@@ -315,12 +323,16 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   }
 
   async function saveVariable() {
-    if (!varName.trim()) return;
+    const trimmed = varName.trim();
+    if (!trimmed) {
+      setVarError("Name is required");
+      return;
+    }
     try {
       if (editingVar) {
-        await invoke("update_variable", { id: editingVar.id, name: varName.trim(), value: varValue, kind: varKind, folderId: varFolderId });
+        await invoke("update_variable", { id: editingVar.id, name: trimmed, value: varValue, kind: varKind, folderId: varFolderId });
       } else {
-        await invoke("add_variable", { name: varName.trim(), value: varValue, kind: varKind, folderId: varFolderId });
+        await invoke("add_variable", { name: trimmed, value: varValue, kind: varKind, folderId: varFolderId });
       }
       setVariableDlg(false);
       onRefreshVariables();
@@ -380,12 +392,21 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   }
 
   async function saveForm() {
-    if (!formName.trim() || !formLabel.trim()) return;
+    const trimmedName = formName.trim();
+    const trimmedLabel = formLabel.trim();
+    if (!trimmedName) {
+      setFormError("Name is required");
+      return;
+    }
+    if (!trimmedLabel) {
+      setFormError("Label is required");
+      return;
+    }
     try {
       if (editingForm) {
-        await invoke("update_form_input", { id: editingForm.id, name: formName.trim(), label: formLabel.trim(), fieldType: formFieldType, placeholder: formPlaceholder, defaultValue: formDefault, required: formRequired, folderId: formFolderId });
+        await invoke("update_form_input", { id: editingForm.id, name: trimmedName, label: trimmedLabel, fieldType: formFieldType, placeholder: formPlaceholder, defaultValue: formDefault, required: formRequired, folderId: formFolderId });
       } else {
-        await invoke("add_form_input", { name: formName.trim(), label: formLabel.trim(), fieldType: formFieldType, placeholder: formPlaceholder, defaultValue: formDefault, required: formRequired, folderId: formFolderId });
+        await invoke("add_form_input", { name: trimmedName, label: trimmedLabel, fieldType: formFieldType, placeholder: formPlaceholder, defaultValue: formDefault, required: formRequired, folderId: formFolderId });
       }
       setFormDlg(false);
       loadFormInputs();
@@ -655,7 +676,8 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
               <div className="flex items-start gap-3">
                 <div className="flex-1 flex flex-col gap-1.5">
                   <label htmlFor="trigger" className="text-xs font-medium text-muted-foreground">Trigger</label>
-                  <Input id="trigger" value={trigger} onChange={(e) => setTrigger(e.target.value)} placeholder="e.g. ;addr" autoFocus />
+                  <Input id="trigger" value={trigger} onChange={(e) => { setTrigger(e.target.value); setTriggerError(""); }} placeholder="e.g. ;addr" autoFocus />
+                  {triggerError && <span className="text-xs text-destructive">{triggerError}</span>}
                 </div>
                 <div className="w-44 flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Folder</label>
@@ -726,7 +748,8 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
-                <Textarea id="expansion" ref={expansionRef} value={expansion} onChange={(e) => setExpansion(e.target.value)} placeholder="e.g. 123 Main St" rows={4} />
+                <Textarea id="expansion" ref={expansionRef} value={expansion} onChange={(e) => { setExpansion(e.target.value); setExpansionError(""); }} placeholder="e.g. 123 Main St" rows={4} />
+                {expansionError && <span className="text-xs text-destructive">{expansionError}</span>}
               </div>
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -784,7 +807,6 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                 )}
               </div>
             </div>
-            {snippetError && <span className="px-1 text-xs text-destructive">{snippetError}</span>}
             <DialogFooter>
               <Button type="submit">{editingSnip ? "Update" : "Add"}</Button>
               <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
@@ -803,7 +825,8 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
             <div className="flex flex-col gap-4 py-4">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="varname" className="text-xs font-medium text-muted-foreground">Name</label>
-                <Input id="varname" value={varName} onChange={(e) => setVarName(e.target.value)} placeholder="e.g. myName" autoFocus />
+                <Input id="varname" value={varName} onChange={(e) => { setVarName(e.target.value); setVarError(""); }} placeholder="e.g. myName" autoFocus />
+                {varError && <span className="text-xs text-destructive">{varError}</span>}
               </div>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="varkind" className="text-xs font-medium text-muted-foreground">Type</label>
@@ -865,7 +888,6 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                 </Select>
               </div>
             </div>
-            {varError && <span className="px-1 text-xs text-destructive">{varError}</span>}
             <DialogFooter>
               <Button type="submit">{editingVar ? "Update" : "Add"}</Button>
               <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
@@ -884,7 +906,8 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
             <div className="flex flex-col gap-4 py-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Name (used as <code className="font-mono">{`{name}`}</code>)</label>
-                <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. fullName" autoFocus />
+                <Input value={formName} onChange={(e) => { setFormName(e.target.value); setFormError(""); }} placeholder="e.g. fullName" autoFocus />
+                {formError && <span className="text-xs text-destructive">{formError}</span>}
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Label</label>
@@ -947,7 +970,6 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                 </Select>
               </div>
             </div>
-            {formError && <span className="px-1 text-xs text-destructive">{formError}</span>}
             <DialogFooter>
               <Button type="submit">{editingForm ? "Update" : "Add"}</Button>
               <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
