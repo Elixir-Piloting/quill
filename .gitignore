@@ -26,3 +26,7 @@ src-tauri/gen/
 *.njsproj
 *.sln
 *.sw?
+
+# Tauri signing key
+quill-key.txt
+quill-key.txt.pub
