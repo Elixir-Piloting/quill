@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { Button } from "@/components/ui/button";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink, Download, UploadIcon, DownloadIcon } from "lucide-react";
 import HotkeyRecorder from "./HotkeyRecorder";
 
@@ -57,7 +58,7 @@ const starterPacks: StarterPackInfo[] = [
   {
     name: "Emoji",
     key: "emoji",
-    description: "60 common emoji shortcodes like :smile:, :heart:, :rocket:",
+    description: "60 common emoji shortcodes like :smile, :heart, :rocket",
     emoji: "😊",
   },
 ];
@@ -420,9 +421,9 @@ function AboutTab() {
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>Quill by <strong>Elixir-Piloting</strong></span>
-        <a href="https://github.com/Elixir-Piloting" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
+        <button onClick={() => openUrl("https://github.com/Elixir-Piloting")} className="inline-flex items-center gap-0.5 text-primary hover:underline">
           GitHub <ExternalLink className="size-3" />
-        </a>
+        </button>
       </div>
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground">v0.1.0</span>

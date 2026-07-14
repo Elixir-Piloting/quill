@@ -23,6 +23,7 @@
     "autostart:default",
     "dialog:default",
     "dialog:allow-open",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    "opener:default"
   ]
 }
