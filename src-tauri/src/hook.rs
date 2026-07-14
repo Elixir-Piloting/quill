@@ -129,7 +129,38 @@ pub fn start_hook(state: Arc<AppState>) {
 }
 
 pub(crate) fn open_form_popup(app: &tauri::AppHandle) {
-    // Destroy any existing form window first
+    destroy_and_create_form(app, None);
+}
+
+pub(crate) fn open_form_popup_with_data(
+    app: &tauri::AppHandle,
+    trigger: &str,
+    expansion: &str,
+    fields: &[db::FormInput],
+) {
+    let field_list: Vec<serde_json::Value> = fields.iter().map(|f| {
+        serde_json::json!({
+            "id": f.id,
+            "name": f.name,
+            "label": f.label,
+            "field_type": f.field_type,
+            "placeholder": f.placeholder,
+            "default_value": f.default_value,
+            "required": f.required,
+        })
+    }).collect();
+
+    let script = format!(
+        "window.__formData = {{ trigger: {}, expansion: {}, fields: {} }};",
+        serde_json::to_string(trigger).unwrap(),
+        serde_json::to_string(expansion).unwrap(),
+        serde_json::to_string(&field_list).unwrap(),
+    );
+
+    destroy_and_create_form(app, Some(&script));
+}
+
+fn destroy_and_create_form(app: &tauri::AppHandle, init_script: Option<&str>) {
     if let Some(popup) = app.get_webview_window("form") {
         let _ = popup.close();
         for _ in 0..20 {
@@ -139,15 +170,19 @@ pub(crate) fn open_form_popup(app: &tauri::AppHandle) {
             std::thread::sleep(Duration::from_millis(50));
         }
     }
-    // Always create a fresh window
-    match WebviewWindowBuilder::new(app, "form", WebviewUrl::App("index.html".into()))
+
+    let mut builder = WebviewWindowBuilder::new(app, "form", WebviewUrl::App("index.html".into()))
         .decorations(false)
         .always_on_top(true)
         .inner_size(440.0, 320.0)
         .center()
-        .title("Quill")
-        .build()
-    {
+        .title("Quill");
+
+    if let Some(script) = init_script {
+        builder = builder.initialization_script(script);
+    }
+
+    match builder.build() {
         Ok(popup) => { let _ = popup.set_focus(); }
         Err(e) => eprintln!("Failed to create form window: {e}"),
     }

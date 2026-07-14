@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { listen } from "@tauri-apps/api/event";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -36,33 +35,39 @@ function FormPopup() {
   const [fields, setFields] = useState<FormInput[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [refreshToken, setRefreshToken] = useState(0);
-
-  function loadPendingForm() {
-    invoke<[string, string, FormInput[]] | null>("get_pending_form").then((data) => {
-      if (!data) return;
-      const [trig, _exp, flds] = data;
-      setTrigger(trig);
-      setFields(flds);
-      const initial: Record<string, string> = {};
-      for (const f of flds) {
-        initial[f.name] = f.default_value;
-      }
-      setValues(initial);
-    });
-  }
 
   useEffect(() => {
     const win = getCurrentWindow();
-    loadPendingForm();
+
+    // Check for data injected via initialization_script (popup path)
+    const injected = (window as any).__formData;
+    if (injected && injected.fields) {
+      setTrigger(injected.trigger || "");
+      setFields(injected.fields);
+      const initial: Record<string, string> = {};
+      for (const f of injected.fields) {
+        initial[f.name] = f.default_value || "";
+      }
+      setValues(initial);
+    } else {
+      // Fall back to pending_form (keyboard hook path)
+      invoke<[string, string, FormInput[]] | null>("get_pending_form").then((data) => {
+        if (!data) return;
+        const [trig, _exp, flds] = data;
+        setTrigger(trig);
+        setFields(flds);
+        const initial: Record<string, string> = {};
+        for (const f of flds) {
+          initial[f.name] = f.default_value;
+        }
+        setValues(initial);
+      });
+    }
+
     win.onFocusChanged(({ payload: focused }) => {
       if (!focused) win.close();
     });
-    const unlisten = listen("form-pending-refresh", () => {
-      setRefreshToken((t) => t + 1);
-    });
-    return () => { unlisten.then((f) => f()); };
-  }, [refreshToken]);
+  }, []);
 
   // Fallback: auto-close if no data loaded after 5s
   useEffect(() => {

@@ -313,8 +313,11 @@ fn close_and_inject(trigger: String, expansion: String, state: tauri::State<'_, 
                         trigger: trigger.clone(),
                         typed_trigger: String::new(),
                         expansion: expansion.clone(),
-                        fields: referenced,
+                        fields: referenced.clone(),
                     });
+                }
+                if let Some(handle) = state.app_handle.lock().unwrap().as_ref() {
+                    hook::open_form_popup_with_data(handle, &trigger, &expansion, &referenced);
                 }
             }
             has
@@ -327,11 +330,7 @@ fn close_and_inject(trigger: String, expansion: String, state: tauri::State<'_, 
     }
     std::thread::sleep(std::time::Duration::from_millis(300));
 
-    if has_form {
-        if let Some(handle) = state.app_handle.lock().unwrap().as_ref() {
-            hook::open_form_popup(handle);
-        }
-    } else {
+    if !has_form {
         injection::inject_text(&expansion, &state.inner());
     }
 
