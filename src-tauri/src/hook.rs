@@ -130,10 +130,11 @@ pub fn start_hook(state: Arc<AppState>) {
 
 pub(crate) fn open_form_popup(app: &tauri::AppHandle) {
     if let Some(popup) = app.get_webview_window("form") {
-        let _ = popup.close();
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    if let Ok(popup) = WebviewWindowBuilder::new(app, "form", WebviewUrl::App("index.html".into()))
+        let _ = popup.eval("location.reload()");
+        std::thread::sleep(Duration::from_millis(100));
+        let _ = popup.show();
+        let _ = popup.set_focus();
+    } else if let Ok(popup) = WebviewWindowBuilder::new(app, "form", WebviewUrl::App("index.html".into()))
         .decorations(false)
         .always_on_top(true)
         .inner_size(440.0, 320.0)

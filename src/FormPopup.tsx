@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { format } from "date-fns";
@@ -35,11 +35,8 @@ function FormPopup() {
   const [fields, setFields] = useState<FormInput[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const loaded = useRef(false);
 
   useEffect(() => {
-    if (loaded.current) return;
-    loaded.current = true;
     const win = getCurrentWindow();
     invoke<[string, string, FormInput[]] | null>("get_pending_form").then((data) => {
       if (!data) return;
