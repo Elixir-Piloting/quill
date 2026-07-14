@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -36,44 +37,41 @@ function FormPopup() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  function loadFormData() {
+    invoke<[string, string, FormInput[]] | null>("get_pending_form").then((data) => {
+      if (!data) return;
+      const [trig, _exp, flds] = data;
+      setTrigger(trig);
+      setFields(flds);
+      const initial: Record<string, string> = {};
+      for (const f of flds) {
+        initial[f.name] = f.default_value;
+      }
+      setValues(initial);
+    });
+  }
+
   useEffect(() => {
     const win = getCurrentWindow();
 
-    // Check for data injected via initialization_script (popup path)
-    const injected = (window as any).__formData;
-    if (injected && injected.fields) {
-      setTrigger(injected.trigger || "");
-      setFields(injected.fields);
-      const initial: Record<string, string> = {};
-      for (const f of injected.fields) {
-        initial[f.name] = f.default_value || "";
-      }
-      setValues(initial);
-    } else {
-      // Fall back to pending_form (keyboard hook path)
-      invoke<[string, string, FormInput[]] | null>("get_pending_form").then((data) => {
-        if (!data) return;
-        const [trig, _exp, flds] = data;
-        setTrigger(trig);
-        setFields(flds);
-        const initial: Record<string, string> = {};
-        for (const f of flds) {
-          initial[f.name] = f.default_value;
-        }
-        setValues(initial);
-      });
-    }
+    loadFormData();
+
+    const unlisten = listen("form-show", () => {
+      loadFormData();
+    });
 
     win.onFocusChanged(({ payload: focused }) => {
-      if (!focused) win.close();
+      if (!focused) win.hide();
     });
+
+    return () => { unlisten.then((fn) => fn()); };
   }, []);
 
-  // Fallback: auto-close if no data loaded after 5s
+  // Fallback: auto-hide if no data loaded after 5s
   useEffect(() => {
     if (fields.length > 0) return;
     const timer = setTimeout(() => {
-      getCurrentWindow().close();
+      getCurrentWindow().hide();
     }, 5000);
     return () => clearTimeout(timer);
   }, [fields]);
@@ -109,7 +107,7 @@ function FormPopup() {
 
   function handleCancel() {
     invoke("cancel_form_injection").catch(() => {});
-    getCurrentWindow().close();
+    getCurrentWindow().hide();
   }
 
   function handleKey(e: React.KeyboardEvent, idx: number) {

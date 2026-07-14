@@ -2,10 +2,9 @@ use std::sync::{
     atomic::Ordering,
     Arc,
 };
-use std::time::Duration;
 
 use rdev::{listen, Event, EventType};
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::{db, injection, process, state::AppState};
 
@@ -96,6 +95,7 @@ pub fn start_hook(state: Arc<AppState>) {
                                 v
                             };
                             if !referenced.is_empty() {
+                                eprintln!("[quill] hook: form inputs found for trigger={trigger}");
                                 if let Ok(mut pf) = state.pending_form.lock() {
                                     *pf = Some(crate::state::PendingFormData {
                                         trigger: trigger.clone(),
@@ -103,6 +103,7 @@ pub fn start_hook(state: Arc<AppState>) {
                                         expansion: expansion.clone(),
                                         fields: referenced,
                                     });
+                                    eprintln!("[quill] hook: pending_form set (keyboard path)");
                                 }
                                 true
                             } else {
@@ -113,9 +114,12 @@ pub fn start_hook(state: Arc<AppState>) {
                     };
 
                     if has_form {
+                        eprintln!("[quill] hook: has_form=true, backspacing and opening form popup");
                         injection::backspace_text(trigger, &state);
                         if let Some(handle) = state.app_handle.lock().unwrap().as_ref() {
                             open_form_popup(handle);
+                        } else {
+                            eprintln!("[quill] hook: failed to get app_handle for form popup");
                         }
                     } else {
                         injection::replace_text_with_casing(trigger, expansion, &state, casing);
@@ -129,62 +133,36 @@ pub fn start_hook(state: Arc<AppState>) {
 }
 
 pub(crate) fn open_form_popup(app: &tauri::AppHandle) {
-    destroy_and_create_form(app, None);
+    show_form_window(app);
 }
 
-pub(crate) fn open_form_popup_with_data(
-    app: &tauri::AppHandle,
-    trigger: &str,
-    expansion: &str,
-    fields: &[db::FormInput],
-) {
-    let field_list: Vec<serde_json::Value> = fields.iter().map(|f| {
-        serde_json::json!({
-            "id": f.id,
-            "name": f.name,
-            "label": f.label,
-            "field_type": f.field_type,
-            "placeholder": f.placeholder,
-            "default_value": f.default_value,
-            "required": f.required,
-        })
-    }).collect();
-
-    let script = format!(
-        "window.__formData = {{ trigger: {}, expansion: {}, fields: {} }};",
-        serde_json::to_string(trigger).unwrap(),
-        serde_json::to_string(expansion).unwrap(),
-        serde_json::to_string(&field_list).unwrap(),
-    );
-
-    destroy_and_create_form(app, Some(&script));
-}
-
-fn destroy_and_create_form(app: &tauri::AppHandle, init_script: Option<&str>) {
+pub(crate) fn show_form_window(app: &tauri::AppHandle) {
     if let Some(popup) = app.get_webview_window("form") {
-        let _ = popup.close();
-        for _ in 0..20 {
-            if app.get_webview_window("form").is_none() {
-                break;
+        eprintln!("[quill] show_form_window: reusing existing form window");
+        let _ = popup.show();
+        let _ = popup.set_focus();
+        // Tell the React component to re-fetch pending_form data
+        let _ = popup.emit("form-show", ());
+    } else {
+        // Fallback: window was destroyed somehow — create it from the main thread
+        eprintln!("[quill] show_form_window: form window missing, creating from main thread");
+        let app_clone = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            match WebviewWindowBuilder::new(&app_clone, "form", WebviewUrl::App("index.html".into()))
+                .decorations(false)
+                .always_on_top(true)
+                .inner_size(440.0, 320.0)
+                .center()
+                .title("Quill")
+                .build()
+            {
+                Ok(popup) => {
+                    eprintln!("[quill] show_form_window: fallback window created");
+                    let _ = popup.set_focus();
+                }
+                Err(e) => eprintln!("[quill] Failed to create form window: {e}"),
             }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-    }
-
-    let mut builder = WebviewWindowBuilder::new(app, "form", WebviewUrl::App("index.html".into()))
-        .decorations(false)
-        .always_on_top(true)
-        .inner_size(440.0, 320.0)
-        .center()
-        .title("Quill");
-
-    if let Some(script) = init_script {
-        builder = builder.initialization_script(script);
-    }
-
-    match builder.build() {
-        Ok(popup) => { let _ = popup.set_focus(); }
-        Err(e) => eprintln!("Failed to create form window: {e}"),
+        });
     }
 }
 

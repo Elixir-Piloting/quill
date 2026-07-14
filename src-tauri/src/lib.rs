@@ -198,7 +198,9 @@ fn get_pending_form(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Option<(String, String, Vec<FormInput>)>, String> {
     let pf = state.pending_form.lock().map_err(|e| e.to_string())?;
-    Ok(pf.as_ref().map(|f| (f.trigger.clone(), f.expansion.clone(), f.fields.clone())))
+    let result = pf.as_ref().map(|f| (f.trigger.clone(), f.expansion.clone(), f.fields.clone()));
+    eprintln!("[quill] get_pending_form called — returning: {:?}", result.as_ref().map(|(t, _, _)| t.as_str()));
+    Ok(result)
 }
 
 #[tauri::command]
@@ -207,17 +209,22 @@ fn submit_form_injection(
     values: HashMap<String, String>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    eprintln!("[quill] submit_form_injection entered");
     let pending = state.pending_form.lock().map_err(|e| e.to_string())?.take();
     if let Some(data) = pending {
+        eprintln!("[quill] submit_form_injection: got pending data, trigger={}", data.trigger);
         let casing = injection::detect_casing(&data.typed_trigger, &data.trigger);
         if let Some(popup) = app.get_webview_window("form") {
+            eprintln!("[quill] submit_form_injection: hiding form window");
             let _ = popup.hide();
+        } else {
+            eprintln!("[quill] submit_form_injection: form window not found");
         }
         std::thread::sleep(std::time::Duration::from_millis(300));
+        eprintln!("[quill] submit_form_injection: injecting form text");
         injection::inject_form_text_with_casing(&data.expansion, &values, state.inner(), casing);
-        if let Some(popup) = app.get_webview_window("form") {
-            let _ = popup.close();
-        }
+    } else {
+        eprintln!("[quill] submit_form_injection: no pending data found");
     }
     Ok(())
 }
@@ -226,6 +233,7 @@ fn submit_form_injection(
 fn cancel_form_injection(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
+    eprintln!("[quill] cancel_form_injection called");
     let mut pending = state.pending_form.lock().map_err(|e| e.to_string())?;
     *pending = None;
     Ok(())
@@ -297,46 +305,59 @@ fn execute_import(
 
 #[tauri::command]
 fn close_and_inject(trigger: String, expansion: String, state: tauri::State<'_, Arc<AppState>>, app: tauri::AppHandle) {
+    eprintln!("[quill] close_and_inject entered — trigger={trigger}, expansion={expansion}");
     state.cancelling.store(false, Ordering::SeqCst);
 
-    let has_form = match state.db.lock() {
-        Ok(conn) => {
-            let form_inputs = db::get_all_form_inputs(&conn).unwrap_or_default();
-            let referenced: Vec<_> = form_inputs
-                .into_iter()
-                .filter(|f| expansion.contains(&format!("{{{}}}", f.name)))
-                .collect();
-            let has = !referenced.is_empty();
-            if has {
-                if let Ok(mut pf) = state.pending_form.lock() {
-                    *pf = Some(crate::state::PendingFormData {
-                        trigger: trigger.clone(),
-                        typed_trigger: String::new(),
-                        expansion: expansion.clone(),
-                        fields: referenced.clone(),
-                    });
-                }
-                if let Some(handle) = state.app_handle.lock().unwrap().as_ref() {
-                    hook::open_form_popup_with_data(handle, &trigger, &expansion, &referenced);
-                }
-            }
-            has
-        }
-        Err(_) => false,
-    };
-
+    // Hide search popup immediately
     if let Some(popup) = app.get_webview_window("search") {
+        eprintln!("[quill] close_and_inject: hiding search popup");
         let _ = popup.hide();
+    } else {
+        eprintln!("[quill] close_and_inject: search popup not found");
     }
     std::thread::sleep(std::time::Duration::from_millis(300));
+    eprintln!("[quill] close_and_inject: 300ms sleep done");
+
+    // Check for form inputs — if found, show form popup; else inject directly
+    let mut has_form = false;
+    if let Ok(conn) = state.db.lock() {
+        let form_inputs = db::get_all_form_inputs(&conn).unwrap_or_default();
+        let referenced: Vec<_> = form_inputs.into_iter()
+            .filter(|f| expansion.contains(&format!("{{{}}}", f.name)))
+            .collect();
+        has_form = !referenced.is_empty();
+        eprintln!("[quill] close_and_inject: has_form={has_form}, referenced_count={}", referenced.len());
+        if has_form {
+            let _ = state.pending_form.lock().map(|mut pf| {
+                *pf = Some(crate::state::PendingFormData {
+                    trigger: trigger.clone(),
+                    typed_trigger: String::new(),
+                    expansion: expansion.clone(),
+                    fields: referenced.clone(),
+                });
+                eprintln!("[quill] close_and_inject: pending_form set with trigger={trigger}");
+            });
+            if let Some(handle) = state.app_handle.lock().ok().and_then(|g| g.as_ref().cloned()) {
+                eprintln!("[quill] close_and_inject: calling show_form_window");
+                hook::show_form_window(&handle);
+            } else {
+                eprintln!("[quill] close_and_inject: failed to get app_handle");
+            }
+        }
+    } else {
+        eprintln!("[quill] close_and_inject: db lock failed");
+    }
 
     if !has_form {
+        eprintln!("[quill] close_and_inject: injecting text directly");
         injection::inject_text(&expansion, &state.inner());
     }
 
     if let Some(popup) = app.get_webview_window("search") {
+        eprintln!("[quill] close_and_inject: closing search popup");
         let _ = popup.close();
     }
+    eprintln!("[quill] close_and_inject: done");
 }
 
 #[tauri::command]
@@ -504,6 +525,20 @@ pub fn run() {
                 pending_form: Mutex::new(None),
                 app_handle: Mutex::new(Some(app.handle().clone())),
             });
+
+            // Create hidden form window (must be done on main thread)
+            if let Err(e) = WebviewWindowBuilder::new(app.handle(), "form", WebviewUrl::App("index.html".into()))
+                .decorations(false)
+                .always_on_top(true)
+                .inner_size(440.0, 320.0)
+                .center()
+                .title("Quill")
+                .build()
+            {
+                eprintln!("[quill] Failed to create form window at startup: {e}");
+            } else {
+                eprintln!("[quill] Form window created at startup");
+            }
 
             let _ = tray::setup_tray(app.handle(), app_state.clone());
 
