@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -35,9 +36,9 @@ function FormPopup() {
   const [fields, setFields] = useState<FormInput[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [refreshToken, setRefreshToken] = useState(0);
 
-  useEffect(() => {
-    const win = getCurrentWindow();
+  function loadPendingForm() {
     invoke<[string, string, FormInput[]] | null>("get_pending_form").then((data) => {
       if (!data) return;
       const [trig, _exp, flds] = data;
@@ -49,10 +50,28 @@ function FormPopup() {
       }
       setValues(initial);
     });
+  }
+
+  useEffect(() => {
+    const win = getCurrentWindow();
+    loadPendingForm();
     win.onFocusChanged(({ payload: focused }) => {
       if (!focused) win.close();
     });
-  }, []);
+    const unlisten = listen("form-pending-refresh", () => {
+      setRefreshToken((t) => t + 1);
+    });
+    return () => { unlisten.then((f) => f()); };
+  }, [refreshToken]);
+
+  // Fallback: auto-close if no data loaded after 5s
+  useEffect(() => {
+    if (fields.length > 0) return;
+    const timer = setTimeout(() => {
+      getCurrentWindow().close();
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [fields]);
 
   function setValue(name: string, val: string) {
     setValues((prev) => ({ ...prev, [name]: val }));

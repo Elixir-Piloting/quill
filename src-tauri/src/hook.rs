@@ -5,7 +5,7 @@ use std::sync::{
 use std::time::Duration;
 
 use rdev::{listen, Event, EventType};
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::{db, injection, process, state::AppState};
 
@@ -130,8 +130,8 @@ pub fn start_hook(state: Arc<AppState>) {
 
 pub(crate) fn open_form_popup(app: &tauri::AppHandle) {
     if let Some(popup) = app.get_webview_window("form") {
-        let _ = popup.eval("location.reload()");
-        std::thread::sleep(Duration::from_millis(100));
+        let _ = popup.emit("form-pending-refresh", ());
+        std::thread::sleep(Duration::from_millis(30));
         let _ = popup.show();
         let _ = popup.set_focus();
     } else if let Ok(popup) = WebviewWindowBuilder::new(app, "form", WebviewUrl::App("index.html".into()))
