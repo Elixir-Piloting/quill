@@ -2,6 +2,7 @@ use std::sync::{
     atomic::Ordering,
     Arc,
 };
+use std::time::Duration;
 
 use rdev::{listen, Event, EventType};
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
@@ -129,19 +130,18 @@ pub fn start_hook(state: Arc<AppState>) {
 
 pub(crate) fn open_form_popup(app: &tauri::AppHandle) {
     if let Some(popup) = app.get_webview_window("form") {
-        let _ = popup.show();
+        let _ = popup.close();
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    if let Ok(popup) = WebviewWindowBuilder::new(app, "form", WebviewUrl::App("index.html".into()))
+        .decorations(false)
+        .always_on_top(true)
+        .inner_size(440.0, 320.0)
+        .center()
+        .title("Quill")
+        .build()
+    {
         let _ = popup.set_focus();
-    } else {
-        if let Ok(popup) = WebviewWindowBuilder::new(app, "form", WebviewUrl::App("index.html".into()))
-            .decorations(false)
-            .always_on_top(true)
-            .inner_size(440.0, 320.0)
-            .center()
-            .title("Quill")
-            .build()
-        {
-            let _ = popup.set_focus();
-        }
     }
 }
 
