@@ -1,10 +1,10 @@
 {
   "version": "1.2.0",
-  "notes": "",
-  "pub_date": "",
+  "notes": "Settings shows real app version; form input dialog re-ordered (label first, name auto-gen, field type + required on same row); variable dialog name+type on same row",
+  "pub_date": "2026-07-15T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMzJEN2c3VTA3VkdtampKMTlHakx5MVNFUm5hemRtZ3BqNmJEdHZnUUFmeTQvOFZCWmQ2V3Z3UWs0SUt2NktPMUpEKzRWTGFxQ1QwaWhVeUxDbW42d3liaVRKbVhReHdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MDUwODYxCWZpbGU6UXVpbGxfMS4yLjBfeDY0X2VuLVVTLm1zaQpyWCtyUFk4MGFZamt1eXRHcFNJdEw4WmhiVVdJY1NFWUVCZVdhNGpRa2FoREpEOGl0QVB1KzZjNDVWa3ZNR3N4T0ZlTWR6ODRzNmFycDdJemJ3ZzREZz09Cg==",
       "url": "https://github.com/Elixir-Piloting/quill/releases/download/v1.2.0/Quill_1.2.0_x64_en-US.msi"
     }
   }
