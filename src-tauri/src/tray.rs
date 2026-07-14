@@ -26,10 +26,17 @@ pub fn setup_tray(app: &AppHandle, state: Arc<AppState>) -> tauri::Result<()> {
 
     let toggle_captured = toggle.clone();
 
-    TrayIconBuilder::with_id("main")
+    let icon = app.default_window_icon().cloned();
+
+    let mut tray = TrayIconBuilder::with_id("main")
         .menu(&menu)
-        .tooltip(tooltip)
-        .on_menu_event(move |app, event| {
+        .tooltip(tooltip);
+
+    if let Some(icon) = icon {
+        tray = tray.icon(icon);
+    }
+
+    tray.on_menu_event(move |app, event| {
             let s = app.state::<Arc<AppState>>();
             match event.id().as_ref() {
                 "open_settings" => {

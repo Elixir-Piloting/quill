@@ -197,6 +197,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   const [appScope, setAppScope] = useState<RunningApp[]>([]);
   const [scopeEnabled, setScopeEnabled] = useState(false);
   const [runningApps, setRunningApps] = useState<RunningApp[]>([]);
+  const [snippetError, setSnippetError] = useState("");
   const expansionRef = useRef<HTMLTextAreaElement>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -225,6 +226,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
     setSnippetFolderId(selectedFolderId ?? uncategorizedFolderId);
     setAppScope([]);
     setScopeEnabled(false);
+    setSnippetError("");
     fetchRunningApps();
     setSnippetDlg(true);
   }
@@ -240,6 +242,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
     })();
     setAppScope(scope);
     setScopeEnabled(scope.length > 0);
+    setSnippetError("");
     fetchRunningApps();
     setSnippetDlg(true);
     loadFormInputs();
@@ -264,7 +267,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
       setSnippetDlg(false);
       onRefreshSnippets();
     } catch (e) {
-      console.error(e);
+      setSnippetError(String(e));
     }
   }
 
@@ -289,6 +292,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   const [varValue, setVarValue] = useState("");
   const [varKind, setVarKind] = useState<VarKind>("text");
   const [varFolderId, setVarFolderId] = useState<number | null>(null);
+  const [varError, setVarError] = useState("");
 
   function openNewVariable() {
     setEditingVar(null);
@@ -296,6 +300,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
     setVarValue("");
     setVarKind("text");
     setVarFolderId(selectedFolderId ?? uncategorizedFolderId);
+    setVarError("");
     setVariableDlg(true);
   }
 
@@ -305,6 +310,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
     setVarValue(v.value);
     setVarKind(v.kind as VarKind);
     setVarFolderId(v.folder_id);
+    setVarError("");
     setVariableDlg(true);
   }
 
@@ -319,7 +325,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
       setVariableDlg(false);
       onRefreshVariables();
     } catch (e) {
-      console.error(e);
+      setVarError(String(e));
     }
   }
 
@@ -341,6 +347,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   const [formDefault, setFormDefault] = useState("");
   const [formRequired, setFormRequired] = useState(true);
   const [formFolderId, setFormFolderId] = useState<number | null>(null);
+  const [formError, setFormError] = useState("");
 
   async function loadFormInputs() {
     try { setFormInputs(await invoke<FormInput[]>("get_form_inputs")); } catch { setFormInputs([]); }
@@ -355,6 +362,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
     setFormDefault("");
     setFormRequired(true);
     setFormFolderId(selectedFolderId ?? uncategorizedFolderId);
+    setFormError("");
     setFormDlg(true);
   }
 
@@ -367,6 +375,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
     setFormDefault(f.default_value);
     setFormRequired(f.required);
     setFormFolderId(f.folder_id);
+    setFormError("");
     setFormDlg(true);
   }
 
@@ -381,7 +390,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
       setFormDlg(false);
       loadFormInputs();
     } catch (e) {
-      console.error(e);
+      setFormError(String(e));
     }
   }
 
@@ -775,6 +784,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                 )}
               </div>
             </div>
+            {snippetError && <span className="px-1 text-xs text-destructive">{snippetError}</span>}
             <DialogFooter>
               <Button type="submit">{editingSnip ? "Update" : "Add"}</Button>
               <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
@@ -855,6 +865,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                 </Select>
               </div>
             </div>
+            {varError && <span className="px-1 text-xs text-destructive">{varError}</span>}
             <DialogFooter>
               <Button type="submit">{editingVar ? "Update" : "Add"}</Button>
               <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
@@ -936,6 +947,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                 </Select>
               </div>
             </div>
+            {formError && <span className="px-1 text-xs text-destructive">{formError}</span>}
             <DialogFooter>
               <Button type="submit">{editingForm ? "Update" : "Add"}</Button>
               <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
