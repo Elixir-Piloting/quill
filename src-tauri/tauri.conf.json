@@ -42,7 +42,7 @@
     "updater": {
       "active": true,
       "dialog": false,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI2Mzg4RTQyNTk5MzBBRDQKUldUVUNwTlpRbzQ0dGlaWWdKa3pvN3YvQXYxWERwN0lMTTlrUWdwcXIwaTlsamxKRkJ3SXhFWUwK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU2MURGOUI3Q0E0QzQzQUEKUldTcVEwekt0L2tkNWp1WXlSSzZZaWNVczJIVkE4eFBML24ya1VDZDc4b1pCeHJjWWpkWnhVbGwK",
       "endpoints": ["https://raw.githubusercontent.com/Elixir-Piloting/quill/main/update.json"]
     }
   }
