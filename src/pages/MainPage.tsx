@@ -8,6 +8,7 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -94,26 +95,57 @@ function truncate(s: string, max: number): string {
 
 function previewDate(fmt: string): string {
   const d = new Date();
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const shortMonths = months.map((m) => m.slice(0, 3));
   const map: Record<string, string | (() => string)> = {
-    "YYYY": String(d.getFullYear()),
-    "YY": String(d.getFullYear()).slice(-2),
-    "MM": String(d.getMonth() + 1).padStart(2, "0"),
-    "M": String(d.getMonth() + 1),
-    "DD": String(d.getDate()).padStart(2, "0"),
-    "D": String(d.getDate()),
-    "HH": String(d.getHours()).padStart(2, "0"),
-    "H": String(d.getHours()),
-    "mm": String(d.getMinutes()).padStart(2, "0"),
-    "ss": String(d.getSeconds()).padStart(2, "0"),
-    "AM/PM": () => (d.getHours() < 12 ? "AM" : "PM"),
+    "%Y": String(d.getFullYear()),
+    "%y": String(d.getFullYear()).slice(-2),
+    "%m": String(d.getMonth() + 1).padStart(2, "0"),
+    "%d": String(d.getDate()).padStart(2, "0"),
+    "%e": String(d.getDate()).padStart(2, " "),
+    "%H": String(d.getHours()).padStart(2, "0"),
+    "%I": String(d.getHours() % 12 || 12).padStart(2, "0"),
+    "%M": String(d.getMinutes()).padStart(2, "0"),
+    "%S": String(d.getSeconds()).padStart(2, "0"),
+    "%p": () => (d.getHours() < 12 ? "AM" : "PM"),
+    "%b": shortMonths[d.getMonth()],
+    "%B": months[d.getMonth()],
   };
   let out = fmt;
   for (const [k, v] of Object.entries(map)) {
     const val = typeof v === "function" ? v() : v;
-    out = out.replace(k, val);
+    out = out.split(k).join(val);
   }
   return out;
 }
+
+const DATE_PRESETS = [
+  "%Y-%m-%d",
+  "%Y-%m-%d %H:%M",
+  "%Y-%m-%d %H:%M:%S",
+  "%Y/%m/%d",
+  "%Y-%m-%dT%H:%M:%S",
+  "%B %d, %Y",
+  "%b %d, %Y",
+  "%b %d",
+  "%B %d",
+  "%d %B %Y",
+  "%d %b %Y",
+  "%d %b",
+  "%b %Y",
+  "%B %Y",
+  "%m/%d/%Y",
+  "%d/%m/%Y",
+  "%m/%d",
+  "%A, %B %d, %Y",
+  "%a, %b %d, %Y",
+  "%A",
+  "%a",
+  "%I:%M %p",
+  "%I:%M:%S %p",
+  "%H:%M",
+  "%H:%M:%S",
+];
 
 export default function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }: Props) {
   const [tab, setTab] = useState<"snippets" | "variables" | "forms">("snippets");
@@ -350,6 +382,14 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   const filteredFormInputs = (selectedFolderId === null
     ? formInputs
     : formInputs.filter((f) => f.folder_id === selectedFolderId)).filter((f) => matchSearch({ trigger: f.name, expansion: f.label }));
+  function labelToName(label: string): string {
+    return label
+      .replace(/[^a-zA-Z0-9\s]/g, "")
+      .split(/\s+/)
+      .map((w, i) => i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join("");
+  }
+
   const [formDlg, setFormDlg] = useState(false);
   const [editingForm, setEditingForm] = useState<FormInput | null>(null);
   const [formName, setFormName] = useState("");
@@ -823,13 +863,14 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
               <DialogTitle>{editingVar ? "Edit Variable" : "Add Variable"}</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 py-4">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="varname" className="text-xs font-medium text-muted-foreground">Name</label>
-                <Input id="varname" value={varName} onChange={(e) => { setVarName(e.target.value); setVarError(""); }} placeholder="e.g. myName" autoFocus />
-                {varError && <span className="text-xs text-destructive">{varError}</span>}
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="varkind" className="text-xs font-medium text-muted-foreground">Type</label>
+              <div className="flex items-start gap-3">
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <label htmlFor="varname" className="text-xs font-medium text-muted-foreground">Name</label>
+                  <Input id="varname" value={varName} onChange={(e) => { setVarName(e.target.value); setVarError(""); }} placeholder="e.g. myName" autoFocus />
+                  {varError && <span className="text-xs text-destructive">{varError}</span>}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="varkind" className="text-xs font-medium text-muted-foreground">Type</label>
                 <Select value={varKind} onValueChange={(v) => setVarKind(v as VarKind)}>
                   <SelectTrigger id="varkind">
                     <SelectValue />
@@ -843,6 +884,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                   </SelectContent>
                 </Select>
               </div>
+            </div>
               {varKind === "text" && (
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="varval" className="text-xs font-medium text-muted-foreground">Value</label>
@@ -852,8 +894,29 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
               {varKind === "date" && (
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="datefmt" className="text-xs font-medium text-muted-foreground">Format</label>
-                  <Input id="datefmt" value={varValue} onChange={(e) => setVarValue(e.target.value)} placeholder="e.g. YYYY-MM-DD" />
-                  <span className="text-xs text-muted-foreground">Preview: {previewDate(varValue)}</span>
+                  <div className="flex gap-2">
+                    <Select value={DATE_PRESETS.includes(varValue) ? varValue : "custom"} onValueChange={(v) => setVarValue(v && v !== "custom" ? v : "")}>
+                      <SelectTrigger id="datefmt" className="flex-1">
+                        <SelectValue placeholder="Choose a format..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {DATE_PRESETS.map((p) => (
+                            <SelectItem key={p} value={p}>
+                              <span className="font-mono text-xs">{p}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">→ {previewDate(p)}</span>
+                            </SelectItem>
+                          ))}
+                          <SelectSeparator />
+                          <SelectItem value="custom">Custom...</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    {!DATE_PRESETS.includes(varValue) && (
+                      <Input value={varValue} onChange={(e) => setVarValue(e.target.value)} placeholder="%Y-%m-%d" className="w-40" />
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground">Preview: {previewDate(varValue) || <span className="italic">no format</span>}</span>
                 </div>
               )}
               <div className="flex flex-col gap-1.5">
@@ -905,26 +968,35 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
             </DialogHeader>
             <div className="flex flex-col gap-4 py-4">
               <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Label</label>
+                <Input value={formLabel} onChange={(e) => { setFormLabel(e.target.value); setFormError(""); if (!editingForm) setFormName(labelToName(e.target.value)); }} placeholder="e.g. Full Name" autoFocus />
+              </div>
+              <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Name (used as <code className="font-mono">{`{name}`}</code>)</label>
-                <Input value={formName} onChange={(e) => { setFormName(e.target.value); setFormError(""); }} placeholder="e.g. fullName" autoFocus />
+                <Input value={formName} onChange={(e) => { setFormName(e.target.value); setFormError(""); }} placeholder="e.g. fullName" />
                 {formError && <span className="text-xs text-destructive">{formError}</span>}
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Label</label>
-                <Input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} placeholder="e.g. Full Name" />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Field Type</label>
-                <Select value={formFieldType} onValueChange={(v) => v && setFormFieldType(v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FIELD_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex items-start gap-3">
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Field Type</label>
+                  <Select value={formFieldType} onValueChange={(v) => v && setFormFieldType(v)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FIELD_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">&nbsp;</label>
+                  <label className="flex h-9 items-center gap-2 text-xs text-muted-foreground">
+                    <input type="checkbox" checked={formRequired} onChange={(e) => setFormRequired(e.target.checked)} className="size-3.5 accent-primary" />
+                    Required
+                  </label>
+                </div>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Placeholder</label>
@@ -934,10 +1006,6 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                 <label className="text-xs font-medium text-muted-foreground">Default Value</label>
                 <Input value={formDefault} onChange={(e) => setFormDefault(e.target.value)} />
               </div>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input type="checkbox" checked={formRequired} onChange={(e) => setFormRequired(e.target.checked)} className="size-3.5 accent-primary" />
-                Required
-              </label>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Folder</label>
                 <Select

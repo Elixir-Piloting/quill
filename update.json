@@ -1,11 +1,11 @@
 {
-  "version": "1.0.0",
-  "notes": "Form popup fix — pre-creates window at startup, show/hide instead of close/destroy\n\n- Fixed white/blank form window when opened from search popup\n- Fixed app lag when form window was being created\n- Window is pre-created at startup (hidden), reused via show/hide\n- Added comprehensive logging for debugging",
-  "pub_date": "2026-07-15T10:50:00Z",
+  "version": "1.2.0",
+  "notes": "",
+  "pub_date": "",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTcVEwekt0L2tkNXBycVFLN08yWHB2SStTK1pic0R3ZEQwM2o3bExQRWFDVWVzRTA4aHl5NUowN3d4V1dmS0k1TGhrMGowbzFyV1UrZzZsKzFKelRLY21tQkpJazZ4eHd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MDMxMTc4CWZpbGU6UXVpbGxfMS4wLjBfeDY0X2VuLVVTLm1zaQpaTkZON3RWeUNkREZhT0gyVzltYlJNZXlqTWVoays0T3R5b3E3UGJWNWh2Y0lvQnozR2UrTE1KM0pKeVpIWGxzSUxXREp1bVhjdnBpUi9Uc1R1SXJCZz09Cg==",
-      "url": "https://github.com/Elixir-Piloting/quill/releases/download/v1.0.0/Quill_1.0.0_x64_en-US.msi"
+      "signature": "",
+      "url": "https://github.com/Elixir-Piloting/quill/releases/download/v1.2.0/Quill_1.2.0_x64_en-US.msi"
     }
   }
 }

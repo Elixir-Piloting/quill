@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { Button } from "@/components/ui/button";
@@ -393,8 +394,11 @@ function HotkeyTab({ hotkey, onChangeHotkey }: Props) {
 }
 
 function AboutTab() {
+  const [appVersion, setAppVersion] = useState("");
   const [updateState, setUpdateState] = useState<"idle" | "checking" | "available" | "downloading" | "done" | "none">("idle");
   const [updateInfo, setUpdateInfo] = useState<{ version: string; body?: string } | null>(null);
+
+  useEffect(() => { getVersion().then(setAppVersion); }, []);
 
   async function checkForUpdates() {
     setUpdateState("checking");
@@ -431,7 +435,7 @@ function AboutTab() {
         </button>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">v0.1.0</span>
+        <span className="text-xs text-muted-foreground">v{appVersion}</span>
         <Button variant="outline" size="xs" onClick={checkForUpdates} disabled={updateState === "checking"}>
           {updateState === "checking" ? "Checking..." : updateState === "none" ? "No updates found" : updateState === "available" ? "Update available" : updateState === "done" ? "Installed" : "Check for Updates"}
         </Button>
