@@ -38,7 +38,7 @@ function Popup() {
   async function select(idx: number) {
     const s = filtered[idx];
     if (!s) return;
-    await invoke("close_and_inject", { expansion: s.expansion });
+    await invoke("close_and_inject", { trigger: s.trigger, expansion: s.expansion });
   }
 
   function handleKey(e: React.KeyboardEvent) {

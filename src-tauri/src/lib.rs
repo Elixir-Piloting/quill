@@ -296,13 +296,45 @@ fn execute_import(
 // ── Popup commands ──
 
 #[tauri::command]
-fn close_and_inject(expansion: String, state: tauri::State<'_, Arc<AppState>>, app: tauri::AppHandle) {
+fn close_and_inject(trigger: String, expansion: String, state: tauri::State<'_, Arc<AppState>>, app: tauri::AppHandle) {
     state.cancelling.store(false, Ordering::SeqCst);
+
+    let has_form = match state.db.lock() {
+        Ok(conn) => {
+            let form_inputs = db::get_all_form_inputs(&conn).unwrap_or_default();
+            let referenced: Vec<_> = form_inputs
+                .into_iter()
+                .filter(|f| expansion.contains(&format!("{{{}}}", f.name)))
+                .collect();
+            let has = !referenced.is_empty();
+            if has {
+                if let Ok(mut pf) = state.pending_form.lock() {
+                    *pf = Some(crate::state::PendingFormData {
+                        trigger: trigger.clone(),
+                        typed_trigger: String::new(),
+                        expansion: expansion.clone(),
+                        fields: referenced,
+                    });
+                }
+            }
+            has
+        }
+        Err(_) => false,
+    };
+
     if let Some(popup) = app.get_webview_window("search") {
         let _ = popup.hide();
     }
     std::thread::sleep(std::time::Duration::from_millis(300));
-    injection::inject_text(&expansion, &state.inner());
+
+    if has_form {
+        if let Some(handle) = state.app_handle.lock().unwrap().as_ref() {
+            hook::open_form_popup(handle);
+        }
+    } else {
+        injection::inject_text(&expansion, &state.inner());
+    }
+
     if let Some(popup) = app.get_webview_window("search") {
         let _ = popup.close();
     }

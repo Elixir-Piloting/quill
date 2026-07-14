@@ -127,7 +127,7 @@ pub fn start_hook(state: Arc<AppState>) {
     });
 }
 
-fn open_form_popup(app: &tauri::AppHandle) {
+pub(crate) fn open_form_popup(app: &tauri::AppHandle) {
     if let Some(popup) = app.get_webview_window("form") {
         let _ = popup.show();
         let _ = popup.set_focus();
