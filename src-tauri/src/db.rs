@@ -290,7 +290,7 @@ pub fn delete_snippet(conn: &Connection, id: i64) -> Result<()> {
 }
 
 pub fn get_all_triggers(conn: &Connection) -> Result<Vec<(i64, String, String, bool, String)>> {
-    let mut stmt = conn.prepare("SELECT id, trigger, expansion, whole_word, app_scope FROM snippets")?;
+    let mut stmt = conn.prepare("SELECT id, trigger, expansion, whole_word, app_scope FROM snippets ORDER BY LENGTH(trigger) DESC")?;
     let triggers = stmt
         .query_map([], |row| {
             Ok((

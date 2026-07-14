@@ -22,9 +22,9 @@ pub fn start_hook(state: Arc<AppState>) {
 
         match event.event_type {
             EventType::KeyPress(_) => {
-                let ch = match event.name.as_deref().and_then(|s| s.chars().next()) {
-                    Some(c) => c,
-                    None => return,
+                let ch = match event.name.as_deref() {
+                    Some(s) if s.len() == 1 => s.chars().next().unwrap(),
+                    _ => return,
                 };
 
                 let mut buffer = state.buffer.lock().unwrap();

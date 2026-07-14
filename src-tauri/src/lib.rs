@@ -404,13 +404,37 @@ fn parse_hotkey(s: &str) -> Result<Shortcut, String> {
             "enter" | "return" => code = Some(Code::Enter),
             "escape" | "esc" => code = Some(Code::Escape),
             "tab" => code = Some(Code::Tab),
-            other => {
-                let is_valid = other.len() == 1 && other.chars().all(|c| c.is_ascii_lowercase())
-                    || other.len() > 1 && other.starts_with('f') && other[1..].chars().all(|c| c.is_ascii_digit());
-                if !is_valid {
+            other if other.len() == 1 => {
+                let c = other.chars().next().unwrap();
+                if c.is_ascii_lowercase() {
+                    code = Some(match c {
+                        'a' => Code::KeyA, 'b' => Code::KeyB, 'c' => Code::KeyC,
+                        'd' => Code::KeyD, 'e' => Code::KeyE, 'f' => Code::KeyF,
+                        'g' => Code::KeyG, 'h' => Code::KeyH, 'i' => Code::KeyI,
+                        'j' => Code::KeyJ, 'k' => Code::KeyK, 'l' => Code::KeyL,
+                        'm' => Code::KeyM, 'n' => Code::KeyN, 'o' => Code::KeyO,
+                        'p' => Code::KeyP, 'q' => Code::KeyQ, 'r' => Code::KeyR,
+                        's' => Code::KeyS, 't' => Code::KeyT, 'u' => Code::KeyU,
+                        'v' => Code::KeyV, 'w' => Code::KeyW, 'x' => Code::KeyX,
+                        'y' => Code::KeyY, 'z' => Code::KeyZ,
+                        _ => return Err(format!("Unknown key: {}", part)),
+                    });
+                } else if c.is_ascii_digit() {
+                    code = Some(match c {
+                        '0' => Code::Digit0, '1' => Code::Digit1, '2' => Code::Digit2,
+                        '3' => Code::Digit3, '4' => Code::Digit4, '5' => Code::Digit5,
+                        '6' => Code::Digit6, '7' => Code::Digit7, '8' => Code::Digit8,
+                        '9' => Code::Digit9,
+                        _ => return Err(format!("Unknown key: {}", part)),
+                    });
+                } else {
                     return Err(format!("Unknown key: {}", part));
                 }
             }
+            other if other.starts_with('f') && other[1..].chars().all(|c| c.is_ascii_digit()) => {
+                return Err("Function keys not supported in hotkey combination".into());
+            }
+            _ => return Err(format!("Unknown key: {}", part)),
         }
     }
 
