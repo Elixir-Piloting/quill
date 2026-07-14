@@ -20,7 +20,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PlusIcon, PencilIcon, Trash2Icon, XIcon, FolderIcon, FolderOpenIcon, CheckIcon } from "lucide-react";
+import { Search, PlusIcon, PencilIcon, Trash2Icon, XIcon, FolderIcon, FolderOpenIcon, CheckIcon } from "lucide-react";
 import {
   Combobox,
   ComboboxContent,
@@ -200,9 +199,23 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   const [runningApps, setRunningApps] = useState<RunningApp[]>([]);
   const expansionRef = useRef<HTMLTextAreaElement>(null);
 
-  const filteredSnippets = selectedFolderId === null
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  function matchSearch(s: { trigger: string; expansion: string }) {
+    return !debouncedSearch
+      || s.trigger.toLowerCase().includes(debouncedSearch.toLowerCase())
+      || s.expansion.toLowerCase().includes(debouncedSearch.toLowerCase());
+  }
+
+  const filteredSnippets = (selectedFolderId === null
     ? snippets
-    : snippets.filter((s) => s.folder_id === selectedFolderId);
+    : snippets.filter((s) => s.folder_id === selectedFolderId)).filter(matchSearch);
 
   function openNewSnippet() {
     setEditingSnip(null);
@@ -313,12 +326,12 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   // ── Form Inputs ──
 
   const [formInputs, setFormInputs] = useState<FormInput[]>([]);
-  const filteredVariables = selectedFolderId === null
+  const filteredVariables = (selectedFolderId === null
     ? variables
-    : variables.filter((v) => v.folder_id === selectedFolderId);
-  const filteredFormInputs = selectedFolderId === null
+    : variables.filter((v) => v.folder_id === selectedFolderId)).filter((v) => matchSearch({ trigger: v.name, expansion: v.value }));
+  const filteredFormInputs = (selectedFolderId === null
     ? formInputs
-    : formInputs.filter((f) => f.folder_id === selectedFolderId);
+    : formInputs.filter((f) => f.folder_id === selectedFolderId)).filter((f) => matchSearch({ trigger: f.name, expansion: f.label }));
   const [formDlg, setFormDlg] = useState(false);
   const [editingForm, setEditingForm] = useState<FormInput | null>(null);
   const [formName, setFormName] = useState("");
@@ -416,12 +429,21 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
 
   return (
     <>
-      <div className="flex h-full flex-col">
+      <div className="flex min-h-0 flex-1 flex-col">
         <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b bg-background px-6 py-3">
-          <div className="flex gap-1">
+          <div className="flex items-center gap-2">
             <Button variant={tab === "snippets" ? "default" : "outline"} size="sm" onClick={() => setTab("snippets")}>Snippets</Button>
             <Button variant={tab === "variables" ? "default" : "outline"} size="sm" onClick={() => setTab("variables")}>Variables</Button>
             <Button variant={tab === "forms" ? "default" : "outline"} size="sm" onClick={() => { setTab("forms"); loadFormInputs(); }}>Form Inputs</Button>
+          </div>
+          <div className="relative mx-4 flex-1 max-w-md">
+            <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search trigger or expansion…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-7 pl-7 text-xs"
+            />
           </div>
           <Button size="sm" onClick={
             tab === "snippets" ? openNewSnippet :
@@ -493,111 +515,106 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
           </div>
 
           {/* Content area */}
-          <div className="flex-1 min-w-0 overflow-y-auto">
+          <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden rounded-xl">
             {tab === "snippets" ? (
-              <Card className="h-fit">
-                <CardContent>
-                  {filteredSnippets.length === 0 ? (
-                    <p className="py-4 text-sm text-muted-foreground">
-                      {selectedFolderId === null ? "No snippets yet." : "This folder is empty."}
-                    </p>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Trigger</TableHead>
-                          <TableHead>Expansion</TableHead>
-                          <TableHead className="w-0 text-right">Actions</TableHead>
+              <div className="h-fit rounded-xl bg-card ring-1 ring-foreground/10">
+                {filteredSnippets.length === 0 ? (
+                  <p className="px-4 py-4 text-sm text-muted-foreground">
+                    {selectedFolderId === null ? "No snippets yet." : "This folder is empty."}
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Trigger</TableHead>
+                        <TableHead>Expansion</TableHead>
+                        <TableHead className="w-0 text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredSnippets.map((s) => (
+                        <TableRow key={s.id}>
+                          <TableCell className="font-mono text-xs">{s.trigger}</TableCell>
+                          <TableCell className="max-w-72 truncate text-muted-foreground">{truncate(s.expansion, 60)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="outline" size="icon-xs" onClick={() => openEditSnippet(s)}>
+                                <PencilIcon />
+                              </Button>
+                              <Button variant="destructive" size="icon-xs" onClick={() => requestDelete("snippet", s.id, s.trigger)}>
+                                <Trash2Icon />
+                              </Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredSnippets.map((s) => (
-                          <TableRow key={s.id}>
-                            <TableCell className="font-mono text-xs">{s.trigger}</TableCell>
-                            <TableCell className="max-w-72 truncate text-muted-foreground">{truncate(s.expansion, 60)}</TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-1">
-                                <Button variant="outline" size="icon-xs" onClick={() => openEditSnippet(s)}>
-                                  <PencilIcon />
-                                </Button>
-                                <Button variant="destructive" size="icon-xs" onClick={() => requestDelete("snippet", s.id, s.trigger)}>
-                                  <Trash2Icon />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
             ) : tab === "variables" ? (
-              <Card className="h-fit">
-                <CardContent>
-                  {filteredVariables.length === 0 ? (
-                    <p className="py-4 text-sm text-muted-foreground">
-                      {selectedFolderId === null ? "No variables yet." : "This folder is empty."}
-                    </p>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Value</TableHead>
-                          <TableHead className="w-0 text-right">Actions</TableHead>
+              <div className="h-fit rounded-xl bg-card ring-1 ring-foreground/10">
+                {filteredVariables.length === 0 ? (
+                  <p className="px-4 py-4 text-sm text-muted-foreground">
+                    {selectedFolderId === null ? "No variables yet." : "This folder is empty."}
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Value</TableHead>
+                        <TableHead className="w-0 text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredVariables.map((v) => (
+                        <TableRow key={v.id}>
+                          <TableCell className="font-mono text-xs">{`{${v.name}}`}</TableCell>
+                          <TableCell><Badge variant="secondary">{kindLabel(v.kind)}</Badge></TableCell>
+                          <TableCell className="max-w-56 truncate text-muted-foreground">{varDisplay(v)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="outline" size="icon-xs" onClick={() => openEditVariable(v)}>
+                                <PencilIcon />
+                              </Button>
+                              <Button variant="destructive" size="icon-xs" onClick={() => requestDelete("variable", v.id, `{${v.name}}`)}>
+                                <Trash2Icon />
+                              </Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredVariables.map((v) => (
-                          <TableRow key={v.id}>
-                            <TableCell className="font-mono text-xs">{`{${v.name}}`}</TableCell>
-                            <TableCell><Badge variant="secondary">{kindLabel(v.kind)}</Badge></TableCell>
-                            <TableCell className="max-w-56 truncate text-muted-foreground">{varDisplay(v)}</TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-1">
-                                <Button variant="outline" size="icon-xs" onClick={() => openEditVariable(v)}>
-                                  <PencilIcon />
-                                </Button>
-                                <Button variant="destructive" size="icon-xs" onClick={() => requestDelete("variable", v.id, `{${v.name}}`)}>
-                                  <Trash2Icon />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
             ) : (
-              <Card className="h-fit">
-                <CardContent>
-                  {filteredFormInputs.length === 0 ? (
-                    <p className="py-4 text-sm text-muted-foreground">
-                      {selectedFolderId === null ? "No form inputs yet." : "This folder is empty."}
-                    </p>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Label</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Required</TableHead>
-                          <TableHead className="w-0 text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredFormInputs.map((fi) => (
-                          <TableRow key={fi.id}>
-                            <TableCell className="font-mono text-xs">{`{${fi.name}}`}</TableCell>
-                            <TableCell className="text-muted-foreground">{fi.label}</TableCell>
-                            <TableCell><Badge variant="secondary">{FIELD_TYPE_LABELS[fi.field_type] || fi.field_type}</Badge></TableCell>
-                            <TableCell>{fi.required ? <Badge>Yes</Badge> : <Badge variant="secondary">No</Badge>}</TableCell>
-                            <TableCell className="text-right">
+              <div className="h-fit rounded-xl bg-card ring-1 ring-foreground/10">
+                {filteredFormInputs.length === 0 ? (
+                  <p className="px-4 py-4 text-sm text-muted-foreground">
+                    {selectedFolderId === null ? "No form inputs yet." : "This folder is empty."}
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Label</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Required</TableHead>
+                        <TableHead className="w-0 text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredFormInputs.map((fi) => (
+                        <TableRow key={fi.id}>
+                          <TableCell className="font-mono text-xs">{`{${fi.name}}`}</TableCell>
+                          <TableCell className="text-muted-foreground">{fi.label}</TableCell>
+                          <TableCell><Badge variant="secondary">{FIELD_TYPE_LABELS[fi.field_type] || fi.field_type}</Badge></TableCell>
+                          <TableCell>{fi.required ? <Badge>Yes</Badge> : <Badge variant="secondary">No</Badge>}</TableCell>
+                          <TableCell className="text-right">
                               <div className="flex justify-end gap-1">
                                 <Button variant="outline" size="icon-xs" onClick={() => openEditForm(fi)}>
                                   <PencilIcon />
@@ -607,13 +624,12 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                                 </Button>
                               </div>
                             </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
             )}
           </div>
         </div>
