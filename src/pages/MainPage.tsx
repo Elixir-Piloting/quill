@@ -36,9 +36,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PlusIcon, PencilIcon, Trash2Icon, XIcon, SearchIcon } from "lucide-react";
+import { PlusIcon, PencilIcon, Trash2Icon, XIcon, FolderIcon, FolderOpenIcon, CheckIcon } from "lucide-react";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+  ComboboxChips,
+  ComboboxChip,
+  ComboboxChipsInput,
+} from "@/components/ui/combobox";
 
-import type { Snippet, Variable, VarKind } from "../App";
+import type { Snippet, Variable, VarKind, Folder } from "../App";
 
 interface RunningApp {
   name: string;
@@ -53,83 +63,24 @@ interface FormInput {
   placeholder: string;
   default_value: string;
   required: boolean;
+  folder_id: number | null;
   created_at: string;
 }
 
-const FIELD_TYPE_LABELS: Record<string, string> = {
-  text: "Text",
-  date: "Date",
-  number: "Number",
-  email: "Email",
-  textarea: "Textarea",
-};
-
-function slug(label: string): string {
-  return label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_|_$/g, "");
-}
-
-// ── Date format helpers ──
-
-interface DateFormatOption { label: string; pattern: string; }
-
-const DATE_FORMATS: DateFormatOption[] = [
-  { label: "2026-07-13",          pattern: "%Y-%m-%d" },
-  { label: "13/07/2026",          pattern: "%d/%m/%Y" },
-  { label: "07/13/2026",          pattern: "%m/%d/%Y" },
-  { label: "July 13, 2026",       pattern: "%B %d, %Y" },
-  { label: "13 July 2026",        pattern: "%d %B %Y" },
-  { label: "Jul 13, 2026",        pattern: "%b %d, %Y" },
-  { label: "13 Jul 2026",         pattern: "%d %b %Y" },
-  { label: "July 13",             pattern: "%B %d" },
-  { label: "13 July",             pattern: "%d %B" },
-  { label: "Jul 13",              pattern: "%b %d" },
-  { label: "13 Jul",              pattern: "%d %b" },
-  { label: "Mon, Jul 13",         pattern: "%a, %b %d" },
-  { label: "Monday, July 13",     pattern: "%A, %B %d" },
-  { label: "Monday",              pattern: "%A" },
-  { label: "Mon",                 pattern: "%a" },
-  { label: "2026-07",             pattern: "%Y-%m" },
-  { label: "July 2026",           pattern: "%B %Y" },
-  { label: "14:30",               pattern: "%H:%M" },
-  { label: "2:30 PM",             pattern: "%I:%M %p" },
-  { label: "14:30:00",            pattern: "%H:%M:%S" },
-  { label: "2:30:00 PM",          pattern: "%I:%M:%S %p" },
-  { label: "2026-07-13 14:30",    pattern: "%Y-%m-%d %H:%M" },
-  { label: "07/13/2026 2:30 PM",  pattern: "%m/%d/%Y %I:%M %p" },
-  { label: "13/07/2026 14:30",    pattern: "%d/%m/%Y %H:%M" },
+const FIELD_TYPES: { value: string; label: string }[] = [
+  { value: "text", label: "Text" },
+  { value: "number", label: "Number" },
+  { value: "email", label: "Email" },
+  { value: "date", label: "Date" },
+  { value: "textarea", label: "Textarea" },
 ];
 
-function previewDate(pattern: string): string {
-  const d = new Date();
-  const map: Record<string, string> = {
-    "%Y": String(d.getFullYear()),
-    "%y": String(d.getFullYear()).slice(-2),
-    "%m": String(d.getMonth() + 1).padStart(2, "0"),
-    "%d": String(d.getDate()).padStart(2, "0"),
-    "%H": String(d.getHours()).padStart(2, "0"),
-    "%I": String(d.getHours() % 12 || 12).padStart(2, "0"),
-    "%M": String(d.getMinutes()).padStart(2, "0"),
-    "%S": String(d.getSeconds()).padStart(2, "0"),
-    "%p": d.getHours() < 12 ? "AM" : "PM",
-    "%B": d.toLocaleDateString("en-US", { month: "long" }),
-    "%b": d.toLocaleDateString("en-US", { month: "short" }),
-    "%A": d.toLocaleDateString("en-US", { weekday: "long" }),
-    "%a": d.toLocaleDateString("en-US", { weekday: "short" }),
-  };
-  let out = pattern;
-  for (const [k, v] of Object.entries(map)) out = out.split(k).join(v);
-  return out;
-}
+const FIELD_TYPE_LABELS: Record<string, string> = Object.fromEntries(FIELD_TYPES.map((t) => [t.value, t.label]));
 
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max) + "\u2026";
-}
-
-// ── Props ──
+const FOLDER_COLORS = [
+  "#bbd953", "#f97316", "#8b5cf6", "#06b6d4", "#ec4899",
+  "#22c55e", "#eab308", "#64748b", "#a855f7", "#14b8a6",
+];
 
 interface Props {
   snippets: Snippet[];
@@ -138,78 +89,129 @@ interface Props {
   onRefreshVariables: () => void;
 }
 
-// ── Main page ──
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max) + "\u2026" : s;
+}
 
-function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }: Props) {
+function previewDate(fmt: string): string {
+  const d = new Date();
+  const map: Record<string, string | (() => string)> = {
+    "YYYY": String(d.getFullYear()),
+    "YY": String(d.getFullYear()).slice(-2),
+    "MM": String(d.getMonth() + 1).padStart(2, "0"),
+    "M": String(d.getMonth() + 1),
+    "DD": String(d.getDate()).padStart(2, "0"),
+    "D": String(d.getDate()),
+    "HH": String(d.getHours()).padStart(2, "0"),
+    "H": String(d.getHours()),
+    "mm": String(d.getMinutes()).padStart(2, "0"),
+    "ss": String(d.getSeconds()).padStart(2, "0"),
+    "AM/PM": () => (d.getHours() < 12 ? "AM" : "PM"),
+  };
+  let out = fmt;
+  for (const [k, v] of Object.entries(map)) {
+    const val = typeof v === "function" ? v() : v;
+    out = out.replace(k, val);
+  }
+  return out;
+}
+
+export default function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }: Props) {
   const [tab, setTab] = useState<"snippets" | "variables" | "forms">("snippets");
-  const [formInputs, setFormInputs] = useState<FormInput[]>([]);
+  const [confirmDlg, setConfirmDlg] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ type: string; id: number; label: string } | null>(null);
 
-  // Snippet dialog
+  // ── Folders ──
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
+  const uncategorizedFolderId = folders.find((f) => f.name === "Uncategorized")?.id ?? null;
+  const [folderDlg, setFolderDlg] = useState(false);
+  const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
+  const [folderName, setFolderName] = useState("");
+  const [folderColor, setFolderColor] = useState(FOLDER_COLORS[0]);
+  const [folderError, setFolderError] = useState("");
+  const [deleteFolderDlg, setDeleteFolderDlg] = useState(false);
+  const [deletingFolder, setDeletingFolder] = useState<Folder | null>(null);
+
+  async function loadFolders() {
+    try { setFolders(await invoke<Folder[]>("get_folders")); } catch { setFolders([]); }
+  }
+
+  useEffect(() => { loadFolders(); }, []);
+
+  function openNewFolder() {
+    setEditingFolder(null);
+    setFolderName("");
+    setFolderColor(FOLDER_COLORS[0]);
+    setFolderError("");
+    setFolderDlg(true);
+  }
+
+  function openEditFolder(f: Folder) {
+    setEditingFolder(f);
+    setFolderName(f.name);
+    setFolderColor(f.color);
+    setFolderError("");
+    setFolderDlg(true);
+  }
+
+  async function saveFolder() {
+    const name = folderName.trim();
+    if (!name) return;
+    setFolderError("");
+    try {
+      if (editingFolder) {
+        await invoke("update_folder", { id: editingFolder.id, name, color: folderColor });
+      } else {
+        await invoke("add_folder", { name, color: folderColor });
+      }
+      setFolderDlg(false);
+      loadFolders();
+    } catch (e) {
+      setFolderError(String(e));
+    }
+  }
+
+  function confirmDeleteFolder(f: Folder) {
+    setDeletingFolder(f);
+    setDeleteFolderDlg(true);
+  }
+
+  async function doDeleteFolder() {
+    if (!deletingFolder) return;
+    await invoke("delete_folder", { id: deletingFolder.id });
+    if (selectedFolderId === deletingFolder.id) setSelectedFolderId(null);
+    setDeleteFolderDlg(false);
+    setDeletingFolder(null);
+    loadFolders();
+    onRefreshSnippets();
+  }
+
+  // ── Snippets ──
+
   const [snippetDlg, setSnippetDlg] = useState(false);
   const [editingSnip, setEditingSnip] = useState<Snippet | null>(null);
   const [trigger, setTrigger] = useState("");
   const [expansion, setExpansion] = useState("");
   const [wholeWord, setWholeWord] = useState(true);
+  const [snippetFolderId, setSnippetFolderId] = useState<number | null>(null);
   const [appScope, setAppScope] = useState<RunningApp[]>([]);
   const [scopeEnabled, setScopeEnabled] = useState(false);
   const [runningApps, setRunningApps] = useState<RunningApp[]>([]);
-  const [appSearch, setAppSearch] = useState("");
   const expansionRef = useRef<HTMLTextAreaElement>(null);
 
-  // Form input dialog
-  const [formDlg, setFormDlg] = useState(false);
-  const [editingForm, setEditingForm] = useState<FormInput | null>(null);
-  const [formName, setFormName] = useState("");
-  const [formLabel, setFormLabel] = useState("");
-  const [formFieldType, setFormFieldType] = useState("text");
-  const [formPlaceholder, setFormPlaceholder] = useState("");
-  const [formDefault, setFormDefault] = useState("");
-  const [formRequired, setFormRequired] = useState(true);
-  const formNameTouched = useRef(false);
-
-  const FORM_FIELD_TYPES = [
-    { value: "text", label: "Text" },
-    { value: "date", label: "Date" },
-    { value: "number", label: "Number" },
-    { value: "email", label: "Email" },
-    { value: "textarea", label: "Textarea" },
-  ];
-
-  // Variable dialog
-  const [variableDlg, setVariableDlg] = useState(false);
-  const [editingVar, setEditingVar] = useState<Variable | null>(null);
-  const [varName, setVarName] = useState("");
-  const [varKind, setVarKind] = useState<VarKind>("text");
-  const [varValue, setVarValue] = useState("");
-  const [varDateFmt, setVarDateFmt] = useState("");
-
-  // Confirm dialog
-  const [confirmDlg, setConfirmDlg] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<{ type: "snippet" | "variable" | "form"; id: number; label: string } | null>(null);
-
-  // ── Load form inputs on mount for snippet editor dropdown ──
-
-  useEffect(() => { loadFormInputs(); }, []);
-
-  async function loadFormInputs() {
-    try {
-      const fi = await invoke<FormInput[]>("get_form_inputs");
-      setFormInputs(fi);
-    } catch {
-      setFormInputs([]);
-    }
-  }
-
-  // ── Snippet CRUD ──
+  const filteredSnippets = selectedFolderId === null
+    ? snippets
+    : snippets.filter((s) => s.folder_id === selectedFolderId);
 
   function openNewSnippet() {
     setEditingSnip(null);
     setTrigger("");
     setExpansion("");
     setWholeWord(true);
+    setSnippetFolderId(selectedFolderId ?? uncategorizedFolderId);
     setAppScope([]);
     setScopeEnabled(false);
-    setAppSearch("");
     fetchRunningApps();
     setSnippetDlg(true);
   }
@@ -219,12 +221,12 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     setTrigger(s.trigger);
     setExpansion(s.expansion);
     setWholeWord(s.whole_word);
+    setSnippetFolderId(s.folder_id ?? uncategorizedFolderId);
     const scope: RunningApp[] = (() => {
       try { return JSON.parse(s.app_scope || "[]"); } catch { return []; }
     })();
     setAppScope(scope);
     setScopeEnabled(scope.length > 0);
-    setAppSearch("");
     fetchRunningApps();
     setSnippetDlg(true);
     loadFormInputs();
@@ -240,13 +242,17 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
   async function saveSnippet() {
     if (!trigger.trim() || !expansion.trim()) return;
     const appScopeStr = JSON.stringify(scopeEnabled ? appScope : []);
-    if (editingSnip) {
-      await invoke("update_snippet", { id: editingSnip.id, trigger: trigger.trim(), expansion: expansion.trim(), wholeWord, appScope: appScopeStr });
-    } else {
-      await invoke("add_snippet", { trigger: trigger.trim(), expansion: expansion.trim(), wholeWord, appScope: appScopeStr });
+    try {
+      if (editingSnip) {
+        await invoke("update_snippet", { id: editingSnip.id, trigger: trigger.trim(), expansion: expansion.trim(), wholeWord, appScope: appScopeStr, folderId: snippetFolderId });
+      } else {
+        await invoke("add_snippet", { trigger: trigger.trim(), expansion: expansion.trim(), wholeWord, appScope: appScopeStr, folderId: snippetFolderId });
+      }
+      setSnippetDlg(false);
+      onRefreshSnippets();
+    } catch (e) {
+      console.error(e);
     }
-    setSnippetDlg(false);
-    onRefreshSnippets();
   }
 
   function insertVariable(name: string) {
@@ -262,7 +268,70 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     });
   }
 
-  // ── Form Input CRUD ──
+  // ── Variables ──
+
+  const [variableDlg, setVariableDlg] = useState(false);
+  const [editingVar, setEditingVar] = useState<Variable | null>(null);
+  const [varName, setVarName] = useState("");
+  const [varValue, setVarValue] = useState("");
+  const [varKind, setVarKind] = useState<VarKind>("text");
+  const [varFolderId, setVarFolderId] = useState<number | null>(null);
+
+  function openNewVariable() {
+    setEditingVar(null);
+    setVarName("");
+    setVarValue("");
+    setVarKind("text");
+    setVarFolderId(selectedFolderId ?? uncategorizedFolderId);
+    setVariableDlg(true);
+  }
+
+  function openEditVariable(v: Variable) {
+    setEditingVar(v);
+    setVarName(v.name);
+    setVarValue(v.value);
+    setVarKind(v.kind as VarKind);
+    setVarFolderId(v.folder_id);
+    setVariableDlg(true);
+  }
+
+  async function saveVariable() {
+    if (!varName.trim()) return;
+    try {
+      if (editingVar) {
+        await invoke("update_variable", { id: editingVar.id, name: varName.trim(), value: varValue, kind: varKind, folderId: varFolderId });
+      } else {
+        await invoke("add_variable", { name: varName.trim(), value: varValue, kind: varKind, folderId: varFolderId });
+      }
+      setVariableDlg(false);
+      onRefreshVariables();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  // ── Form Inputs ──
+
+  const [formInputs, setFormInputs] = useState<FormInput[]>([]);
+  const filteredVariables = selectedFolderId === null
+    ? variables
+    : variables.filter((v) => v.folder_id === selectedFolderId);
+  const filteredFormInputs = selectedFolderId === null
+    ? formInputs
+    : formInputs.filter((f) => f.folder_id === selectedFolderId);
+  const [formDlg, setFormDlg] = useState(false);
+  const [editingForm, setEditingForm] = useState<FormInput | null>(null);
+  const [formName, setFormName] = useState("");
+  const [formLabel, setFormLabel] = useState("");
+  const [formFieldType, setFormFieldType] = useState("text");
+  const [formPlaceholder, setFormPlaceholder] = useState("");
+  const [formDefault, setFormDefault] = useState("");
+  const [formRequired, setFormRequired] = useState(true);
+  const [formFolderId, setFormFolderId] = useState<number | null>(null);
+
+  async function loadFormInputs() {
+    try { setFormInputs(await invoke<FormInput[]>("get_form_inputs")); } catch { setFormInputs([]); }
+  }
 
   function openNewForm() {
     setEditingForm(null);
@@ -272,7 +341,7 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     setFormPlaceholder("");
     setFormDefault("");
     setFormRequired(true);
-    formNameTouched.current = false;
+    setFormFolderId(selectedFolderId ?? uncategorizedFolderId);
     setFormDlg(true);
   }
 
@@ -284,26 +353,23 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     setFormPlaceholder(f.placeholder);
     setFormDefault(f.default_value);
     setFormRequired(f.required);
+    setFormFolderId(f.folder_id);
     setFormDlg(true);
   }
 
   async function saveForm() {
-    if (!formName.trim()) return;
-    const payload = {
-      name: formName.trim(),
-      label: formLabel.trim() || formName.trim(),
-      fieldType: formFieldType,
-      placeholder: formPlaceholder.trim(),
-      defaultValue: formDefault.trim(),
-      required: formRequired,
-    };
-    if (editingForm) {
-      await invoke("update_form_input", { id: editingForm.id, ...payload });
-    } else {
-      await invoke("add_form_input", payload);
+    if (!formName.trim() || !formLabel.trim()) return;
+    try {
+      if (editingForm) {
+        await invoke("update_form_input", { id: editingForm.id, name: formName.trim(), label: formLabel.trim(), fieldType: formFieldType, placeholder: formPlaceholder, defaultValue: formDefault, required: formRequired, folderId: formFolderId });
+      } else {
+        await invoke("add_form_input", { name: formName.trim(), label: formLabel.trim(), fieldType: formFieldType, placeholder: formPlaceholder, defaultValue: formDefault, required: formRequired, folderId: formFolderId });
+      }
+      setFormDlg(false);
+      loadFormInputs();
+    } catch (e) {
+      console.error(e);
     }
-    setFormDlg(false);
-    loadFormInputs();
   }
 
   function requestDeleteForm(id: number, label: string) {
@@ -311,47 +377,9 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     setConfirmDlg(true);
   }
 
-  // ── Variable CRUD ──
+  // ── Delete confirm ──
 
-  function openNewVariable() {
-    setEditingVar(null);
-    setVarName("");
-    setVarKind("text");
-    setVarValue("");
-    setVarDateFmt("");
-    setVariableDlg(true);
-  }
-
-  function openEditVariable(v: Variable) {
-    setEditingVar(v);
-    setVarName(v.name);
-    setVarKind(v.kind as VarKind);
-    if (v.kind === "date") {
-      setVarDateFmt(v.value);
-      setVarValue("");
-    } else {
-      setVarValue(v.value);
-      setVarDateFmt("");
-    }
-    setVariableDlg(true);
-  }
-
-  async function saveVariable() {
-    if (!varName.trim()) return;
-    const finalValue = varKind === "date" ? varDateFmt : varValue;
-    const payload = { name: varName.trim(), value: finalValue, kind: varKind };
-    if (editingVar) {
-      await invoke("update_variable", { id: editingVar.id, ...payload });
-    } else {
-      await invoke("add_variable", payload);
-    }
-    setVariableDlg(false);
-    onRefreshVariables();
-  }
-
-  // ── Delete ──
-
-  function requestDelete(type: "snippet" | "variable", id: number, label: string) {
+  function requestDelete(type: string, id: number, label: string) {
     setPendingDelete({ type, id, label });
     setConfirmDlg(true);
   }
@@ -388,138 +416,208 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
 
   return (
     <>
-      <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
-          <div className="flex shrink-0 items-center justify-between">
-            <div className="flex gap-1">
-              <Button variant={tab === "snippets" ? "default" : "outline"} size="sm" onClick={() => setTab("snippets")}>Snippets</Button>
-              <Button variant={tab === "variables" ? "default" : "outline"} size="sm" onClick={() => setTab("variables")}>Variables</Button>
-              <Button variant={tab === "forms" ? "default" : "outline"} size="sm" onClick={() => { setTab("forms"); loadFormInputs(); }}>Form Inputs</Button>
-            </div>
-            <Button size="sm" onClick={
-              tab === "snippets" ? openNewSnippet :
-              tab === "variables" ? openNewVariable :
-              openNewForm
-            }>
-              <PlusIcon data-icon="start" />
-              Add {tab === "snippets" ? "Snippet" : tab === "variables" ? "Variable" : "Form Input"}
-            </Button>
+      <div className="flex h-full flex-col">
+        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b bg-background px-6 py-3">
+          <div className="flex gap-1">
+            <Button variant={tab === "snippets" ? "default" : "outline"} size="sm" onClick={() => setTab("snippets")}>Snippets</Button>
+            <Button variant={tab === "variables" ? "default" : "outline"} size="sm" onClick={() => setTab("variables")}>Variables</Button>
+            <Button variant={tab === "forms" ? "default" : "outline"} size="sm" onClick={() => { setTab("forms"); loadFormInputs(); }}>Form Inputs</Button>
           </div>
-          {tab === "snippets" ? (
-            <Card className="h-fit">
-              <CardContent>
-                {snippets.length === 0 ? (
-                  <p className="py-4 text-sm text-muted-foreground">No snippets yet.</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Trigger</TableHead>
-                        <TableHead>Expansion</TableHead>
-                        <TableHead className="w-0 text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {snippets.map((s) => (
-                        <TableRow key={s.id}>
-                          <TableCell className="font-mono text-xs">{s.trigger}</TableCell>
-                          <TableCell className="max-w-72 truncate text-muted-foreground">{truncate(s.expansion, 60)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button variant="outline" size="xs" onClick={() => openEditSnippet(s)}>
-                                <PencilIcon />Edit
-                              </Button>
-                              <Button variant="destructive" size="xs" onClick={() => requestDelete("snippet", s.id, s.trigger)}>
-                                <Trash2Icon />Delete
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          ) : tab === "variables" ? (
-            <Card className="h-fit">
-              <CardContent>
-                {variables.length === 0 ? (
-                  <p className="py-4 text-sm text-muted-foreground">No variables yet.</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Value</TableHead>
-                        <TableHead className="w-0 text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {variables.map((v) => (
-                        <TableRow key={v.id}>
-                          <TableCell className="font-mono text-xs">{`{${v.name}}`}</TableCell>
-                          <TableCell><Badge variant="secondary">{kindLabel(v.kind)}</Badge></TableCell>
-                          <TableCell className="max-w-56 truncate text-muted-foreground">{varDisplay(v)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button variant="outline" size="xs" onClick={() => openEditVariable(v)}>
-                                <PencilIcon />Edit
-                              </Button>
-                              <Button variant="destructive" size="xs" onClick={() => requestDelete("variable", v.id, `{${v.name}}`)}>
-                                <Trash2Icon />Delete
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="h-fit">
-              <CardContent>
-                {formInputs.length === 0 ? (
-                  <p className="py-4 text-sm text-muted-foreground">No form inputs yet.</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Label</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Required</TableHead>
-                        <TableHead className="w-0 text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {formInputs.map((f) => (
-                        <TableRow key={f.id}>
-                          <TableCell className="font-mono text-xs">{`{${f.name}}`}</TableCell>
-                          <TableCell className="text-muted-foreground">{f.label}</TableCell>
-                          <TableCell><Badge variant="secondary">{FIELD_TYPE_LABELS[f.field_type] || f.field_type}</Badge></TableCell>
-                          <TableCell>{f.required ? <Badge>Yes</Badge> : <Badge variant="secondary">No</Badge>}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button variant="outline" size="xs" onClick={() => openEditForm(f)}>
-                                <PencilIcon />Edit
-                              </Button>
-                              <Button variant="destructive" size="xs" onClick={() => requestDeleteForm(f.id, f.label)}>
-                                <Trash2Icon />Delete
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          )}
+          <Button size="sm" onClick={
+            tab === "snippets" ? openNewSnippet :
+            tab === "variables" ? openNewVariable :
+            openNewForm
+          }>
+            <PlusIcon data-icon="start" />
+            Add {tab === "snippets" ? "Snippet" : tab === "variables" ? "Variable" : "Form Input"}
+            {selectedFolderId !== null && folders.find((f) => f.id === selectedFolderId) &&
+              ` to ${folders.find((f) => f.id === selectedFolderId)!.name}`}
+          </Button>
         </div>
+
+        <div className="flex flex-1 min-h-0 gap-4 overflow-hidden px-6 pb-4 pt-3">
+          {/* Folder sidebar — shared across all tabs */}
+          <div className="flex w-44 shrink-0 flex-col gap-1 overflow-y-auto">
+            <button
+              className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs transition-colors ${
+                selectedFolderId === null ? "bg-primary/15 font-medium text-primary" : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setSelectedFolderId(null)}
+            >
+              <FolderIcon className="size-3.5" />
+              All {tab === "snippets" ? "Snippets" : tab === "variables" ? "Variables" : "Form Inputs"}
+            </button>
+            {folders.filter((f) => f.name !== "Uncategorized").map((f) => (
+              <div key={f.id} className="group flex items-center gap-1">
+                <button
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs transition-colors ${
+                    selectedFolderId === f.id ? "bg-primary/15 font-medium text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => setSelectedFolderId(f.id)}
+                >
+                  {f.color ? <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: f.color }} /> : <FolderOpenIcon className="size-3.5" />}
+                  <span className="truncate">{f.name}</span>
+                </button>
+                <div className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button className="flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted" onClick={(e) => { e.stopPropagation(); openEditFolder(f); }}>
+                    <PencilIcon className="size-3" />
+                  </button>
+                  <button className="flex size-5 items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); confirmDeleteFolder(f); }}>
+                    <Trash2Icon className="size-3" />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {/* Uncategorized always shown last */}
+            {folders.find((f) => f.name === "Uncategorized") && (() => {
+              const uf = folders.find((f) => f.name === "Uncategorized")!;
+              return (
+                <button
+                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs transition-colors ${
+                    selectedFolderId === uf.id ? "bg-primary/15 font-medium text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => setSelectedFolderId(uf.id)}
+                >
+                  <XIcon className="size-3.5" />
+                  Uncategorized
+                </button>
+              );
+            })()}
+            <div className="border-t pt-2 mt-1">
+              <div className="flex gap-1">
+                <Button variant="ghost" size="xs" className="w-full" onClick={openNewFolder}>
+                  <PlusIcon className="size-3" /> New Folder
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Content area */}
+          <div className="flex-1 min-w-0 overflow-y-auto">
+            {tab === "snippets" ? (
+              <Card className="h-fit">
+                <CardContent>
+                  {filteredSnippets.length === 0 ? (
+                    <p className="py-4 text-sm text-muted-foreground">
+                      {selectedFolderId === null ? "No snippets yet." : "This folder is empty."}
+                    </p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Trigger</TableHead>
+                          <TableHead>Expansion</TableHead>
+                          <TableHead className="w-0 text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredSnippets.map((s) => (
+                          <TableRow key={s.id}>
+                            <TableCell className="font-mono text-xs">{s.trigger}</TableCell>
+                            <TableCell className="max-w-72 truncate text-muted-foreground">{truncate(s.expansion, 60)}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button variant="outline" size="icon-xs" onClick={() => openEditSnippet(s)}>
+                                  <PencilIcon />
+                                </Button>
+                                <Button variant="destructive" size="icon-xs" onClick={() => requestDelete("snippet", s.id, s.trigger)}>
+                                  <Trash2Icon />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            ) : tab === "variables" ? (
+              <Card className="h-fit">
+                <CardContent>
+                  {filteredVariables.length === 0 ? (
+                    <p className="py-4 text-sm text-muted-foreground">
+                      {selectedFolderId === null ? "No variables yet." : "This folder is empty."}
+                    </p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Value</TableHead>
+                          <TableHead className="w-0 text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredVariables.map((v) => (
+                          <TableRow key={v.id}>
+                            <TableCell className="font-mono text-xs">{`{${v.name}}`}</TableCell>
+                            <TableCell><Badge variant="secondary">{kindLabel(v.kind)}</Badge></TableCell>
+                            <TableCell className="max-w-56 truncate text-muted-foreground">{varDisplay(v)}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button variant="outline" size="icon-xs" onClick={() => openEditVariable(v)}>
+                                  <PencilIcon />
+                                </Button>
+                                <Button variant="destructive" size="icon-xs" onClick={() => requestDelete("variable", v.id, `{${v.name}}`)}>
+                                  <Trash2Icon />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="h-fit">
+                <CardContent>
+                  {filteredFormInputs.length === 0 ? (
+                    <p className="py-4 text-sm text-muted-foreground">
+                      {selectedFolderId === null ? "No form inputs yet." : "This folder is empty."}
+                    </p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Label</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Required</TableHead>
+                          <TableHead className="w-0 text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredFormInputs.map((fi) => (
+                          <TableRow key={fi.id}>
+                            <TableCell className="font-mono text-xs">{`{${fi.name}}`}</TableCell>
+                            <TableCell className="text-muted-foreground">{fi.label}</TableCell>
+                            <TableCell><Badge variant="secondary">{FIELD_TYPE_LABELS[fi.field_type] || fi.field_type}</Badge></TableCell>
+                            <TableCell>{fi.required ? <Badge>Yes</Badge> : <Badge variant="secondary">No</Badge>}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button variant="outline" size="icon-xs" onClick={() => openEditForm(fi)}>
+                                  <PencilIcon />
+                                </Button>
+                                <Button variant="destructive" size="icon-xs" onClick={() => requestDeleteForm(fi.id, fi.label)}>
+                                  <Trash2Icon />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* ═══ Snippet dialog ═══ */}
       <Dialog open={snippetDlg} onOpenChange={setSnippetDlg}>
@@ -529,9 +627,42 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
               <DialogTitle>{editingSnip ? "Edit Snippet" : "Add Snippet"}</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 py-4">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="trigger" className="text-xs font-medium text-muted-foreground">Trigger</label>
-                <Input id="trigger" value={trigger} onChange={(e) => setTrigger(e.target.value)} placeholder="e.g. ;addr" autoFocus />
+              <div className="flex items-start gap-3">
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <label htmlFor="trigger" className="text-xs font-medium text-muted-foreground">Trigger</label>
+                  <Input id="trigger" value={trigger} onChange={(e) => setTrigger(e.target.value)} placeholder="e.g. ;addr" autoFocus />
+                </div>
+                <div className="w-44 flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Folder</label>
+                <Select
+                  defaultValue={String(snippetFolderId ?? uncategorizedFolderId ?? '')}
+                  onValueChange={(v) => setSnippetFolderId(Number(v))}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {(val) => {
+                        const f = folders.find((ff) => String(ff.id) === val);
+                        return f ? (
+                          <span className="flex items-center gap-2">
+                            {f.color && <span className="size-2 rounded-full" style={{ backgroundColor: f.color }} />}
+                            {f.name}
+                          </span>
+                        ) : val;
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {folders.map((f) => (
+                      <SelectItem key={f.id} value={String(f.id)}>
+                        <span className="flex items-center gap-2">
+                          {f.color && <span className="size-2 rounded-full" style={{ backgroundColor: f.color }} />}
+                          {f.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                </div>
               </div>
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
@@ -581,50 +712,50 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
               </div>
               <div className="flex flex-col gap-2">
                 <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <input type="checkbox" checked={scopeEnabled} onChange={(e) => { setScopeEnabled(e.target.checked); if (!e.target.checked) setAppSearch(""); }} className="size-3.5 accent-primary" />
+                  <input type="checkbox" checked={scopeEnabled} onChange={(e) => { setScopeEnabled(e.target.checked); if (!e.target.checked) setAppScope([]); }} className="size-3.5 accent-primary" />
                   Restrict to specific apps
                 </label>
                 {scopeEnabled && (
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex flex-wrap gap-1.5">
+                  <Combobox
+                    multiple
+                    value={appScope.map((a) => a.exe)}
+                    onValueChange={(v, _details) => {
+                      const selected = v as string[];
+                      setAppScope(selected.map((exe) => {
+                        const found = runningApps.find((a) => a.exe === exe);
+                        return found || { name: exe, exe };
+                      }));
+                    }}
+                    itemToStringLabel={(exe) => {
+                      const app = runningApps.find((a) => a.exe === exe);
+                      return app?.name ?? exe;
+                    }}
+                  >
+                    <ComboboxChips>
                       {appScope.map((a) => (
-                        <span key={a.exe} className="inline-flex items-center gap-1 rounded bg-primary/15 px-2 py-0.5 text-xs">
-                          {a.name}
-                          <button type="button" onClick={() => setAppScope(appScope.filter((x) => x.exe !== a.exe))} className="hover:text-destructive">
-                            <XIcon className="size-3" />
-                          </button>
-                        </span>
+                        <ComboboxChip key={a.exe}>{a.name}</ComboboxChip>
                       ))}
-                    </div>
-                    <div className="relative">
-                      <SearchIcon className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        type="text"
-                        value={appSearch}
-                        onChange={(e) => setAppSearch(e.target.value)}
+                      <ComboboxChipsInput
                         placeholder="Search running apps..."
-                        className="w-full rounded-md border border-input bg-background py-1.5 pl-7 pr-2 text-xs outline-none focus:border-primary"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") e.stopPropagation();
+                        }}
                       />
-                    </div>
-                    <div className="max-h-36 overflow-y-auto rounded-md border border-input">
-                      {runningApps
-                        .filter((a) => a.name.toLowerCase().includes(appSearch.toLowerCase()) && !appScope.some((s) => s.exe === a.exe))
-                        .slice(0, 20)
-                        .map((a) => (
-                          <button
-                            key={a.exe}
-                            type="button"
-                            onClick={() => { setAppScope([...appScope, a]); setAppSearch(""); }}
-                            className="w-full px-2 py-1 text-left text-xs hover:bg-accent"
-                          >
-                            {a.name}
-                          </button>
-                        ))}
-                      {runningApps.filter((a) => a.name.toLowerCase().includes(appSearch.toLowerCase()) && !appScope.some((s) => s.exe === a.exe)).length === 0 && (
-                        <div className="px-2 py-1 text-xs text-muted-foreground">No matching apps</div>
-                      )}
-                    </div>
-                  </div>
+                    </ComboboxChips>
+                    <ComboboxContent>
+                      <ComboboxEmpty>No matching apps</ComboboxEmpty>
+                      <ComboboxList>
+                        {runningApps
+                          .filter((a) => !appScope.some((s) => s.exe === a.exe))
+                          .map((a) => (
+                            <ComboboxItem key={a.exe} value={a.exe}>
+                              <CheckIcon className="size-3.5 opacity-0 data-selected:opacity-100" />
+                              {a.name}
+                            </ComboboxItem>
+                          ))}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
                 )}
               </div>
             </div>
@@ -636,128 +767,77 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
         </DialogContent>
       </Dialog>
 
-      {/* ═══ Form Input dialog ═══ */}
-      <Dialog open={formDlg} onOpenChange={setFormDlg}>
-        <DialogContent className="sm:max-w-md">
-          <form onSubmit={(e) => { e.preventDefault(); saveForm(); }}>
-            <DialogHeader>
-              <DialogTitle>{editingForm ? "Edit Form Input" : "Add Form Input"}</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-4 py-4">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="form-label" className="text-xs font-medium text-muted-foreground">Label</label>
-                <Input
-                  id="form-label"
-                  value={formLabel}
-                  onChange={(e) => { setFormLabel(e.target.value); if (!editingForm && !formNameTouched.current) setFormName(slug(e.target.value)); }}
-                  placeholder="e.g. Client name?"
-                  autoFocus
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="form-name" className="text-xs font-medium text-muted-foreground">Variable name</label>
-                <Input id="form-name" value={formName} onChange={(e) => { formNameTouched.current = true; setFormName(e.target.value); }} placeholder="auto-generated from label" />
-                <span className="text-xs text-muted-foreground">Use <code className="font-mono text-primary">{`{${formName || 'name'}}`}</code> in snippet expansion</span>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="form-field-type" className="text-xs font-medium text-muted-foreground">Type</label>
-                <Select value={formFieldType} onValueChange={(v) => { if (v) setFormFieldType(v); }}>
-                  <SelectTrigger id="form-field-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {FORM_FIELD_TYPES.map((t) => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-              {formFieldType !== "textarea" && (
-              <div className="flex gap-2">
-                <div className="flex flex-1 flex-col gap-1.5">
-                  <label htmlFor="form-placeholder" className="text-xs font-medium text-muted-foreground">Placeholder (optional)</label>
-                  <Input id="form-placeholder" value={formPlaceholder} onChange={(e) => setFormPlaceholder(e.target.value)} placeholder={formFieldType === "date" ? "e.g. Select a date" : "e.g. John Doe"} />
-                </div>
-                <div className="flex flex-1 flex-col gap-1.5">
-                  <label htmlFor="form-default" className="text-xs font-medium text-muted-foreground">Default value (optional)</label>
-                  <Input id="form-default" value={formDefault} onChange={(e) => setFormDefault(e.target.value)} placeholder={formFieldType === "date" ? "e.g. 2026-07-13" : "e.g. John"} />
-                </div>
-              </div>
-              )}
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input type="checkbox" checked={formRequired} onChange={(e) => setFormRequired(e.target.checked)} className="size-3.5 accent-primary" />
-                Required
-              </label>
-            </div>
-            <DialogFooter>
-              <Button type="submit">{editingForm ? "Update" : "Add"}</Button>
-              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
       {/* ═══ Variable dialog ═══ */}
       <Dialog open={variableDlg} onOpenChange={setVariableDlg}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-sm">
           <form onSubmit={(e) => { e.preventDefault(); saveVariable(); }}>
             <DialogHeader>
               <DialogTitle>{editingVar ? "Edit Variable" : "Add Variable"}</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 py-4">
-              <div className="flex gap-3">
-                <div className="flex flex-1 flex-col gap-1.5">
-                  <label htmlFor="var-name" className="text-xs font-medium text-muted-foreground">Name</label>
-                  <Input id="var-name" value={varName} onChange={(e) => setVarName(e.target.value)} placeholder="e.g. signature" autoFocus />
-                </div>
-                <div className="flex w-40 flex-col gap-1.5">
-                  <label htmlFor="var-kind" className="text-xs font-medium text-muted-foreground">Type</label>
-                  <Select value={varKind} onValueChange={(v) => { if (v) { setVarKind(v as VarKind); setVarDateFmt(""); setVarValue(""); } }}>
-                    <SelectTrigger id="var-kind">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="text">Text</SelectItem>
-                        <SelectItem value="date">Date &amp; Time</SelectItem>
-                        <SelectItem value="clipboard">Clipboard</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="varname" className="text-xs font-medium text-muted-foreground">Name</label>
+                <Input id="varname" value={varName} onChange={(e) => setVarName(e.target.value)} placeholder="e.g. myName" autoFocus />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="varkind" className="text-xs font-medium text-muted-foreground">Type</label>
+                <Select value={varKind} onValueChange={(v) => setVarKind(v as VarKind)}>
+                  <SelectTrigger id="varkind">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="text">Text</SelectItem>
+                      <SelectItem value="date">Date &amp; Time</SelectItem>
+                      <SelectItem value="clipboard">Clipboard</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </div>
               {varKind === "text" && (
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="var-value" className="text-xs font-medium text-muted-foreground">Value</label>
-                  <Textarea id="var-value" value={varValue} onChange={(e) => setVarValue(e.target.value)} placeholder="e.g. Best regards,\nJohn" rows={3} />
+                  <label htmlFor="varval" className="text-xs font-medium text-muted-foreground">Value</label>
+                  <Input id="varval" value={varValue} onChange={(e) => setVarValue(e.target.value)} placeholder="Your content here" />
                 </div>
               )}
               {varKind === "date" && (
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="var-date-fmt" className="text-xs font-medium text-muted-foreground">Date format</label>
-                  <Select value={varDateFmt} onValueChange={(v) => { if (v) setVarDateFmt(v); }}>
-                    <SelectTrigger id="var-date-fmt">
-                      <SelectValue placeholder="Select a format…" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      <SelectGroup>
-                        {DATE_FORMATS.map((f) => (
-                          <SelectItem key={f.pattern} value={f.pattern}>{previewDate(f.pattern)}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  {varDateFmt && <p className="text-xs text-muted-foreground">Preview: {previewDate(varDateFmt)}</p>}
+                  <label htmlFor="datefmt" className="text-xs font-medium text-muted-foreground">Format</label>
+                  <Input id="datefmt" value={varValue} onChange={(e) => setVarValue(e.target.value)} placeholder="e.g. YYYY-MM-DD" />
+                  <span className="text-xs text-muted-foreground">Preview: {previewDate(varValue)}</span>
                 </div>
               )}
-              {varKind === "clipboard" && (
-                <p className="text-xs text-muted-foreground">This variable will be replaced by the current clipboard contents when expanded.</p>
-              )}
-              {varKind === "text" && varValue && (
-                <p className="text-xs text-muted-foreground">Use the <strong>Insert Variable</strong> button in the snippet editor to add this variable.</p>
-              )}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Folder</label>
+                <Select
+                  defaultValue={String(varFolderId ?? uncategorizedFolderId ?? '')}
+                  onValueChange={(v) => setVarFolderId(Number(v))}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {(val) => {
+                        const f = folders.find((ff) => String(ff.id) === val);
+                        return f ? (
+                          <span className="flex items-center gap-2">
+                            {f.color && <span className="size-2 rounded-full" style={{ backgroundColor: f.color }} />}
+                            {f.name}
+                          </span>
+                        ) : val;
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {folders.map((f) => (
+                      <SelectItem key={f.id} value={String(f.id)}>
+                        <span className="flex items-center gap-2">
+                          {f.color && <span className="size-2 rounded-full" style={{ backgroundColor: f.color }} />}
+                          {f.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
               <Button type="submit">{editingVar ? "Update" : "Add"}</Button>
@@ -767,17 +847,154 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
         </DialogContent>
       </Dialog>
 
-      {/* ═══ Confirm delete dialog ═══ */}
-      <Dialog open={confirmDlg} onOpenChange={(open) => { if (!open) { setConfirmDlg(false); setPendingDelete(null); } }}>
+      {/* ═══ Form dialog ═══ */}
+      <Dialog open={formDlg} onOpenChange={setFormDlg}>
+        <DialogContent className="sm:max-w-sm">
+          <form onSubmit={(e) => { e.preventDefault(); saveForm(); }}>
+            <DialogHeader>
+              <DialogTitle>{editingForm ? "Edit Form Input" : "Add Form Input"}</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 py-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Name (used as <code className="font-mono">{`{name}`}</code>)</label>
+                <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. fullName" autoFocus />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Label</label>
+                <Input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} placeholder="e.g. Full Name" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Field Type</label>
+                <Select value={formFieldType} onValueChange={(v) => v && setFormFieldType(v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FIELD_TYPES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Placeholder</label>
+                <Input value={formPlaceholder} onChange={(e) => setFormPlaceholder(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Default Value</label>
+                <Input value={formDefault} onChange={(e) => setFormDefault(e.target.value)} />
+              </div>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" checked={formRequired} onChange={(e) => setFormRequired(e.target.checked)} className="size-3.5 accent-primary" />
+                Required
+              </label>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Folder</label>
+                <Select
+                  defaultValue={String(formFolderId ?? uncategorizedFolderId ?? '')}
+                  onValueChange={(v) => setFormFolderId(Number(v))}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {(val) => {
+                        const f = folders.find((ff) => String(ff.id) === val);
+                        return f ? (
+                          <span className="flex items-center gap-2">
+                            {f.color && <span className="size-2 rounded-full" style={{ backgroundColor: f.color }} />}
+                            {f.name}
+                          </span>
+                        ) : val;
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {folders.map((f) => (
+                      <SelectItem key={f.id} value={String(f.id)}>
+                        <span className="flex items-center gap-2">
+                          {f.color && <span className="size-2 rounded-full" style={{ backgroundColor: f.color }} />}
+                          {f.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="submit">{editingForm ? "Update" : "Add"}</Button>
+              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Delete confirm dialog ═══ */}
+      <Dialog open={confirmDlg} onOpenChange={setConfirmDlg}>
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
-            <DialogTitle>Delete {pendingDelete?.type === "snippet" ? "snippet" : pendingDelete?.type === "form" ? "form input" : "variable"}?</DialogTitle>
+            <DialogTitle>Delete {pendingDelete?.type === "snippet" ? "Snippet" : pendingDelete?.type === "variable" ? "Variable" : "Form Input"}?</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Are you sure you want to delete <strong>{pendingDelete?.label}</strong>? This cannot be undone.
+          <p className="py-2 text-sm text-muted-foreground">
+            Are you sure you want to delete <span className="font-medium text-foreground">{pendingDelete?.label}</span>? This cannot be undone.
           </p>
-          <DialogFooter className="mt-2">
+          <DialogFooter>
             <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Folder dialog ═══ */}
+      <Dialog open={folderDlg} onOpenChange={setFolderDlg}>
+        <DialogContent className="sm:max-w-xs">
+          <form onSubmit={(e) => { e.preventDefault(); saveFolder(); }}>
+            <DialogHeader>
+              <DialogTitle>{editingFolder ? "Rename Folder" : "New Folder"}</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 py-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Name</label>
+                <Input value={folderName} onChange={(e) => setFolderName(e.target.value)} placeholder="e.g. Personal" autoFocus />
+                {folderError && <span className="text-xs text-destructive">{folderError}</span>}
+              </div>
+              {!editingFolder && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Color</label>
+                  <div className="flex flex-wrap gap-2">
+                    {FOLDER_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        className={`size-6 rounded-full ring-offset-2 ring-offset-background transition-shadow ${
+                          folderColor === c ? "ring-2 ring-foreground" : ""
+                        }`}
+                        style={{ backgroundColor: c }}
+                        onClick={() => setFolderColor(c)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="submit">{editingFolder ? "Rename" : "Create"}</Button>
+              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Delete folder confirm dialog ═══ */}
+      <Dialog open={deleteFolderDlg} onOpenChange={setDeleteFolderDlg}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Delete "{deletingFolder?.name}"?</DialogTitle>
+          </DialogHeader>
+          <p className="py-2 text-sm text-muted-foreground">
+            Items in this folder will be moved to Uncategorized. This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="destructive" onClick={doDeleteFolder}>Delete Folder</Button>
             <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
           </DialogFooter>
         </DialogContent>
@@ -785,5 +1002,3 @@ function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }
     </>
   );
 }
-
-export default MainPage;

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::db;
 
-const EXPORT_VERSION: u32 = 1;
+const EXPORT_VERSION: u32 = 3;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExportData {
@@ -12,6 +12,7 @@ pub struct ExportData {
     pub snippets: Vec<ExportedSnippet>,
     pub variables: Vec<ExportedVariable>,
     pub form_inputs: Vec<ExportedFormInput>,
+    pub folders: Vec<ExportedFolder>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,6 +21,8 @@ pub struct ExportedSnippet {
     pub expansion: String,
     pub whole_word: bool,
     pub app_scope: String,
+    #[serde(default)]
+    pub folder: Option<String>,
     pub created_at: String,
 }
 
@@ -28,6 +31,8 @@ pub struct ExportedVariable {
     pub name: String,
     pub value: String,
     pub kind: String,
+    #[serde(default)]
+    pub folder: Option<String>,
     pub created_at: String,
 }
 
@@ -39,6 +44,15 @@ pub struct ExportedFormInput {
     pub placeholder: String,
     pub default_value: String,
     pub required: bool,
+    #[serde(default)]
+    pub folder: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExportedFolder {
+    pub name: String,
+    pub color: String,
     pub created_at: String,
 }
 
@@ -47,6 +61,7 @@ pub struct ImportPreview {
     pub snippet_count: usize,
     pub variable_count: usize,
     pub form_input_count: usize,
+    pub folder_count: usize,
     pub version: u32,
     pub is_version_future: bool,
 }
@@ -56,6 +71,7 @@ pub struct ImportResult {
     pub snippets_imported: usize,
     pub variables_imported: usize,
     pub form_inputs_imported: usize,
+    pub folders_imported: usize,
     pub duplicates_skipped: usize,
 }
 
@@ -63,9 +79,23 @@ pub fn build_export(conn: &rusqlite::Connection) -> Result<String, String> {
     let snippets = db::get_all_snippets(conn).map_err(|e| e.to_string())?;
     let variables = db::get_all_variables(conn).map_err(|e| e.to_string())?;
     let form_inputs = db::get_all_form_inputs(conn).map_err(|e| e.to_string())?;
+    let folders = db::get_all_folders(conn).map_err(|e| e.to_string())?;
+
+    let folder_map: std::collections::HashMap<i64, String> = folders
+        .iter()
+        .map(|f| (f.id, f.name.clone()))
+        .collect();
 
     let data = ExportData {
         version: EXPORT_VERSION,
+        folders: folders
+            .into_iter()
+            .map(|f| ExportedFolder {
+                name: f.name,
+                color: f.color,
+                created_at: f.created_at,
+            })
+            .collect(),
         snippets: snippets
             .into_iter()
             .map(|s| ExportedSnippet {
@@ -73,6 +103,7 @@ pub fn build_export(conn: &rusqlite::Connection) -> Result<String, String> {
                 expansion: s.expansion,
                 whole_word: s.whole_word,
                 app_scope: s.app_scope,
+                folder: s.folder_id.and_then(|id| folder_map.get(&id).cloned()),
                 created_at: s.created_at,
             })
             .collect(),
@@ -82,6 +113,7 @@ pub fn build_export(conn: &rusqlite::Connection) -> Result<String, String> {
                 name: v.name,
                 value: v.value,
                 kind: v.kind,
+                folder: v.folder_id.and_then(|id| folder_map.get(&id).cloned()),
                 created_at: v.created_at,
             })
             .collect(),
@@ -94,6 +126,7 @@ pub fn build_export(conn: &rusqlite::Connection) -> Result<String, String> {
                 placeholder: f.placeholder,
                 default_value: f.default_value,
                 required: f.required,
+                folder: f.folder_id.and_then(|id| folder_map.get(&id).cloned()),
                 created_at: f.created_at,
             })
             .collect(),
@@ -120,6 +153,7 @@ pub fn validate_import(json: &str) -> Result<ImportPreview, String> {
         snippet_count: data.snippets.len(),
         variable_count: data.variables.len(),
         form_input_count: data.form_inputs.len(),
+        folder_count: data.folders.len(),
         version: data.version,
         is_version_future: data.version > EXPORT_VERSION,
     })
@@ -135,7 +169,7 @@ pub fn execute_import(
 
     if mode == "replace" {
         conn.execute_batch(
-            "DELETE FROM snippets; DELETE FROM variables; DELETE FROM form_inputs;",
+            "DELETE FROM snippets; DELETE FROM variables; DELETE FROM form_inputs; DELETE FROM folders;",
         )
         .map_err(|e| e.to_string())?;
     }
@@ -144,9 +178,42 @@ pub fn execute_import(
     let mut snippets_imported = 0;
     let mut variables_imported = 0;
     let mut form_inputs_imported = 0;
+    let mut folders_imported = 0;
+
+    // Import folders first, building a name→id map
+    let mut folder_name_to_id: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+
+    // Pre-populate with existing folders
+    if let Ok(existing) = db::get_all_folders(conn) {
+        for f in existing {
+            folder_name_to_id.insert(f.name.to_lowercase(), f.id);
+        }
+    }
+
+    for f in &data.folders {
+        match db::get_folder_by_name(conn, &f.name) {
+            Ok(Some(existing)) => {
+                folder_name_to_id.insert(f.name.to_lowercase(), existing.id);
+            }
+            _ => {
+                match db::add_folder(conn, &f.name, &f.color) {
+                    Ok(id) => {
+                        folder_name_to_id.insert(f.name.to_lowercase(), id);
+                        folders_imported += 1;
+                    }
+                    Err(e) => {
+                        if e.to_string().contains("UNIQUE") {
+                            duplicates_skipped += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     for s in &data.snippets {
-        match db::add_snippet(conn, &s.trigger, &s.expansion, s.whole_word, &s.app_scope) {
+        let folder_id = s.folder.as_ref().and_then(|name| folder_name_to_id.get(&name.to_lowercase()).copied());
+        match db::add_snippet(conn, &s.trigger, &s.expansion, s.whole_word, &s.app_scope, folder_id) {
             Ok(_) => snippets_imported += 1,
             Err(e) => {
                 if e.to_string().contains("UNIQUE") {
@@ -159,7 +226,8 @@ pub fn execute_import(
     }
 
     for v in &data.variables {
-        match db::add_variable(conn, &v.name, &v.value, &v.kind) {
+        let folder_id = v.folder.as_ref().and_then(|name| folder_name_to_id.get(&name.to_lowercase()).copied());
+        match db::add_variable(conn, &v.name, &v.value, &v.kind, folder_id) {
             Ok(_) => variables_imported += 1,
             Err(e) => {
                 if e.to_string().contains("UNIQUE") {
@@ -172,6 +240,7 @@ pub fn execute_import(
     }
 
     for f in &data.form_inputs {
+        let folder_id = f.folder.as_ref().and_then(|name| folder_name_to_id.get(&name.to_lowercase()).copied());
         match db::add_form_input(
             conn,
             &f.name,
@@ -180,6 +249,7 @@ pub fn execute_import(
             &f.placeholder,
             &f.default_value,
             f.required,
+            folder_id,
         ) {
             Ok(_) => form_inputs_imported += 1,
             Err(e) => {
@@ -196,6 +266,7 @@ pub fn execute_import(
         snippets_imported,
         variables_imported,
         form_inputs_imported,
+        folders_imported,
         duplicates_skipped,
     })
 }

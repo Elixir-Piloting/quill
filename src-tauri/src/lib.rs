@@ -13,7 +13,7 @@ use std::sync::{atomic::Ordering, Arc, Mutex};
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
-use db::{FormInput, Snippet, Variable};
+use db::{Folder, FormInput, Snippet, Variable};
 use state::AppState;
 
 // ── Snippet commands ──
@@ -31,9 +31,11 @@ fn add_snippet(
     expansion: String,
     whole_word: bool,
     app_scope: String,
+    folder_id: Option<i64>,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::add_snippet(&conn, &trigger, &expansion, whole_word, &app_scope).map_err(|e| e.to_string())
+    db::add_snippet(&conn, &trigger, &expansion, whole_word, &app_scope, folder_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -44,9 +46,11 @@ fn update_snippet(
     expansion: String,
     whole_word: bool,
     app_scope: String,
+    folder_id: Option<i64>,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::update_snippet(&conn, id, &trigger, &expansion, whole_word, &app_scope).map_err(|e| e.to_string())
+    db::update_snippet(&conn, id, &trigger, &expansion, whole_word, &app_scope, folder_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -56,6 +60,44 @@ fn delete_snippet(
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     db::delete_snippet(&conn, id).map_err(|e| e.to_string())
+}
+
+// ── Folder commands ──
+
+#[tauri::command]
+fn get_folders(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<Folder>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::get_all_folders(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn add_folder(
+    state: tauri::State<'_, Arc<AppState>>,
+    name: String,
+    color: String,
+) -> Result<i64, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::add_folder(&conn, &name, &color).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn update_folder(
+    state: tauri::State<'_, Arc<AppState>>,
+    id: i64,
+    name: String,
+    color: String,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::update_folder(&conn, id, &name, &color).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_folder(
+    state: tauri::State<'_, Arc<AppState>>,
+    id: i64,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::delete_folder(&conn, id).map_err(|e| e.to_string())
 }
 
 // ── Variable commands ──
@@ -72,9 +114,10 @@ fn add_variable(
     name: String,
     value: String,
     kind: String,
+    folder_id: Option<i64>,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::add_variable(&conn, &name, &value, &kind).map_err(|e| e.to_string())
+    db::add_variable(&conn, &name, &value, &kind, folder_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -84,9 +127,10 @@ fn update_variable(
     name: String,
     value: String,
     kind: String,
+    folder_id: Option<i64>,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::update_variable(&conn, id, &name, &value, &kind).map_err(|e| e.to_string())
+    db::update_variable(&conn, id, &name, &value, &kind, folder_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -115,9 +159,10 @@ fn add_form_input(
     placeholder: String,
     defaultValue: String,
     required: bool,
+    folder_id: Option<i64>,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::add_form_input(&conn, &name, &label, &fieldType, &placeholder, &defaultValue, required).map_err(|e| e.to_string())
+    db::add_form_input(&conn, &name, &label, &fieldType, &placeholder, &defaultValue, required, folder_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -130,9 +175,10 @@ fn update_form_input(
     placeholder: String,
     defaultValue: String,
     required: bool,
+    folder_id: Option<i64>,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::update_form_input(&conn, id, &name, &label, &fieldType, &placeholder, &defaultValue, required).map_err(|e| e.to_string())
+    db::update_form_input(&conn, id, &name, &label, &fieldType, &placeholder, &defaultValue, required, folder_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -380,7 +426,6 @@ pub fn run() {
             std::fs::create_dir_all(&app_data_dir).expect("failed to create app data dir");
             let db_path = app_data_dir.join("quill.db");
             let conn = db::init_db(db_path.to_str().unwrap()).expect("failed to init db");
-            db::seed_defaults(&conn).expect("failed to seed defaults");
 
             let app_state = Arc::new(AppState {
                 db: Mutex::new(conn),
@@ -426,6 +471,10 @@ pub fn run() {
             add_snippet,
             update_snippet,
             delete_snippet,
+            get_folders,
+            add_folder,
+            update_folder,
+            delete_folder,
             get_variables,
             add_variable,
             update_variable,
