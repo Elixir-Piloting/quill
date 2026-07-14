@@ -5,7 +5,7 @@ use std::sync::{
 use std::time::Duration;
 
 use rdev::{listen, Event, EventType};
-use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::{db, injection, process, state::AppState};
 
@@ -129,12 +129,18 @@ pub fn start_hook(state: Arc<AppState>) {
 }
 
 pub(crate) fn open_form_popup(app: &tauri::AppHandle) {
+    // Destroy any existing form window first
     if let Some(popup) = app.get_webview_window("form") {
-        let _ = popup.emit("form-pending-refresh", ());
-        std::thread::sleep(Duration::from_millis(30));
-        let _ = popup.show();
-        let _ = popup.set_focus();
-    } else if let Ok(popup) = WebviewWindowBuilder::new(app, "form", WebviewUrl::App("index.html".into()))
+        let _ = popup.close();
+        for _ in 0..20 {
+            if app.get_webview_window("form").is_none() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+    // Always create a fresh window
+    match WebviewWindowBuilder::new(app, "form", WebviewUrl::App("index.html".into()))
         .decorations(false)
         .always_on_top(true)
         .inner_size(440.0, 320.0)
@@ -142,7 +148,8 @@ pub(crate) fn open_form_popup(app: &tauri::AppHandle) {
         .title("Quill")
         .build()
     {
-        let _ = popup.set_focus();
+        Ok(popup) => { let _ = popup.set_focus(); }
+        Err(e) => eprintln!("Failed to create form window: {e}"),
     }
 }
 
