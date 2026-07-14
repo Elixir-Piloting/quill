@@ -41,6 +41,27 @@ interface ImportResult {
   duplicates_skipped: number;
 }
 
+interface StarterPackInfo {
+  name: string;
+  key: string;
+  description: string;
+  emoji: string;
+}
+
+interface StarterPackResult {
+  snippets_added: number;
+  duplicates_skipped: number;
+}
+
+const starterPacks: StarterPackInfo[] = [
+  {
+    name: "Emoji",
+    key: "emoji",
+    description: "60 common emoji shortcodes like :smile:, :heart:, :rocket:",
+    emoji: "😊",
+  },
+];
+
 function SettingsModal(props: Props) {
   const [tab, setTab] = useState<Tab>("general");
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
@@ -50,6 +71,8 @@ function SettingsModal(props: Props) {
   const [importFilePath, setImportFilePath] = useState<string>("");
   const [importError, setImportError] = useState<string>("");
   const [importing, setImporting] = useState(false);
+  const [installingPack, setInstallingPack] = useState<string | null>(null);
+  const [packResults, setPackResults] = useState<Record<string, StarterPackResult>>({});
 
   if (!props.open) return null;
 
@@ -114,6 +137,19 @@ function SettingsModal(props: Props) {
     setReplaceConfirmed(false);
   }
 
+  async function installPack(key: string) {
+    setInstallingPack(key);
+    try {
+      const result: StarterPackResult = await invoke("install_starter_pack", { name: key });
+      setPackResults((prev) => ({ ...prev, [key]: result }));
+      props.onRefreshSnippets();
+    } catch (e) {
+      console.error("Failed to install starter pack:", e);
+    } finally {
+      setInstallingPack(null);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onMouseDown={props.onClose}>
       <div className="flex h-[420px] w-[520px] overflow-hidden rounded-xl bg-popover shadow-2xl ring-1 ring-border" onMouseDown={(e) => e.stopPropagation()}>
@@ -132,7 +168,16 @@ function SettingsModal(props: Props) {
         </div>
         <div className="flex flex-1 flex-col">
           <div className="flex-1 overflow-y-auto p-5">
-            {tab === "general" && <GeneralTab {...props} onExport={handleExport} onImport={handleImport} />}
+            {tab === "general" && (
+              <GeneralTab
+                {...props}
+                onExport={handleExport}
+                onImport={handleImport}
+                installingPack={installingPack}
+                packResults={packResults}
+                onInstallPack={installPack}
+              />
+            )}
             {tab === "hotkey" && <HotkeyTab {...props} />}
             {tab === "about" && <AboutTab />}
           </div>
@@ -242,7 +287,7 @@ function SettingsModal(props: Props) {
   );
 }
 
-function GeneralTab({ onExport, onImport, ...props }: Props & { onExport: () => void; onImport: () => void }) {
+function GeneralTab({ onExport, onImport, installingPack, packResults, onInstallPack, ...props }: Props & { onExport: () => void; onImport: () => void; installingPack: string | null; packResults: Record<string, StarterPackResult>; onInstallPack: (key: string) => void }) {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1.5">
@@ -294,6 +339,39 @@ function GeneralTab({ onExport, onImport, ...props }: Props & { onExport: () => 
               <UploadIcon className="size-3.5" /> Import Snippets
             </Button>
           </div>
+        </div>
+      </div>
+
+      <div className="border-t pt-4">
+        <div className="flex flex-col gap-3">
+          <label className="text-xs font-medium text-muted-foreground">Starter Packs</label>
+          {starterPacks.map((pack) => {
+            const result = packResults[pack.key];
+            return (
+              <div key={pack.key} className="flex items-center gap-3 rounded-lg border bg-card p-3">
+                <span className="text-2xl">{pack.emoji}</span>
+                <div className="flex-1">
+                  <div className="text-sm font-medium">{pack.name}</div>
+                  <div className="text-xs text-muted-foreground">{pack.description}</div>
+                </div>
+                {result ? (
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                    {result.snippets_added} added
+                    {result.duplicates_skipped > 0 && `, ${result.duplicates_skipped} skipped`}
+                  </div>
+                ) : (
+                  <Button
+                    variant="default"
+                    size="xs"
+                    onClick={() => onInstallPack(pack.key)}
+                    disabled={installingPack === pack.key}
+                  >
+                    {installingPack === pack.key ? "Adding..." : "Add"}
+                  </Button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

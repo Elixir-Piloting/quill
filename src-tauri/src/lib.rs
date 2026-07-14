@@ -3,6 +3,7 @@ mod export;
 mod hook;
 mod injection;
 mod process;
+mod starter;
 mod state;
 mod tray;
 mod uia;
@@ -247,6 +248,17 @@ fn get_paused(state: tauri::State<'_, Arc<AppState>>) -> bool {
 #[tauri::command]
 fn get_running_apps() -> Vec<process::AppEntry> {
     process::get_running_apps()
+}
+
+// ── Starter pack command ──
+
+#[tauri::command]
+fn install_starter_pack(
+    state: tauri::State<'_, Arc<AppState>>,
+    name: String,
+) -> Result<starter::StarterPackResult, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    starter::install_pack(&conn, &name)
 }
 
 // ── Import/Export commands ──
@@ -498,6 +510,7 @@ pub fn run() {
             export_data,
             validate_import,
             execute_import,
+            install_starter_pack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
