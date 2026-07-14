@@ -1,11 +1,11 @@
 {
-  "version": "0.1.0",
-  "notes": "Initial release of Quill\n\n- Snippet text expansion with trigger matching\n- Variable system (text, date/time, clipboard)\n- System tray with pause/resume\n- Custom titlebar\n- Theme selector (system/light/dark)\n- Close to tray option\n- Keyboard hook for real-time expansion\n- Emoji starter pack\n- Debounced search in snippets\n- Custom scrollbar styling\n- Auto-updater support",
-  "pub_date": "2026-07-14T10:50:00Z",
+  "version": "1.0.0",
+  "notes": "Form popup fix — pre-creates window at startup, show/hide instead of close/destroy\n\n- Fixed white/blank form window when opened from search popup\n- Fixed app lag when form window was being created\n- Window is pre-created at startup (hidden), reused via show/hide\n- Added comprehensive logging for debugging",
+  "pub_date": "2026-07-15T10:50:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUVUNwTlpRbzQ0dG1RMUwwejgwbDU5Wk1SOUkyK2tFQVJRYktuSTMxTDZyQ0RDN2NoQk5EOWV4am5hd1JYTEZ2MDlMNnc3eHBnZFlVRnVKb3l4NlZ1UWhWbFhlRWFjSmc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MDE3ODY3CWZpbGU6UXVpbGxfMC4xLjBfeDY0X2VuLVVTLm1zaQpqOVNOR016cHdJUk1tQk9qMDNqSjhhRm9DRW13cEw4anNUUXZnZ2hxOUpOMkRoWXF4YXZTdlRpRUlFMzdYb3NzNkwrQWI5Tlg2czg4dG84SXdUT0pCdz09Cg==",
-      "url": "https://github.com/Elixir-Piloting/quill/releases/download/v0.1.0/Quill_0.1.0_x64_en-US.msi"
+      "url": "https://github.com/Elixir-Piloting/quill/releases/download/v1.0.0/Quill_1.0.0_x64_en-US.msi"
     }
   }
 }
