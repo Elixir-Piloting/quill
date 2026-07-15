@@ -1,0 +1,8 @@
+- `quill-icon.png` — App icon, use as og:image + favicon
+- `quill-hero.mp4` — Hero demo: shows app window doing text expansions
+- `form-input-demo.mp4` — Form inputs section: text expander firing into a textarea
+- `no-config-files.mp4` — Feature card: no config needed, out-of-box demo
+- `variables-adapt.png` — Feature card: variables that adapt screenshot
+- `find-snippet.png` — Feature card: find snippet UI screenshot
+- `scoped-to-app.png` — Feature card: scoped to app screenshot
+- `variables-that-adapt.mp4` — Extra video asset (not currently used on landing page)
