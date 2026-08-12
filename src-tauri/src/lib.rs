@@ -12,7 +12,7 @@ mod uia;
 use std::collections::HashMap;
 use std::sync::{atomic::Ordering, Arc, Mutex};
 
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Listener, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 use db::{Folder, FormInput, Snippet, Variable};
@@ -571,6 +571,11 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            let restart_handle = app.handle().clone();
+            app.listen("app:restart", move |_| {
+                let _ = restart_handle.restart();
+            });
+
             let app_data_dir = app.path().app_data_dir().expect("failed to get app data dir");
             std::fs::create_dir_all(&app_data_dir).expect("failed to create app data dir");
             let db_path = app_data_dir.join("quill.db");

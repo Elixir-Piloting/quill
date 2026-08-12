@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
+import { emit } from "@tauri-apps/api/event";
 import { save, open } from "@tauri-apps/plugin-dialog";
-import { check } from "@tauri-apps/plugin-updater";
 import { Button } from "@/components/ui/button";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, Download, UploadIcon, DownloadIcon, ChevronDown, ChevronUp } from "lucide-react";
+import { ExternalLink, UploadIcon, DownloadIcon, ChevronDown, ChevronUp } from "lucide-react";
 import HotkeyRecorder from "./HotkeyRecorder";
 
 type Theme = "system" | "light" | "dark";
@@ -467,37 +467,75 @@ function HotkeyTab({ hotkey, onChangeHotkey }: Props) {
   );
 }
 
+type UpdateStatus =
+  | "checking"
+  | "available"
+  | "current"
+  | "idle";
+
 function AboutTab() {
   const [appVersion, setAppVersion] = useState("");
-  const [updateState, setUpdateState] = useState<"idle" | "checking" | "available" | "downloading" | "done" | "none">("idle");
-  const [updateInfo, setUpdateInfo] = useState<{ version: string; body?: string } | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => { getVersion().then(setAppVersion); }, []);
 
-  async function checkForUpdates() {
-    setUpdateState("checking");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setUpdateStatus("checking");
+      try {
+        const { check } = await import("@tauri-apps/plugin-updater");
+        const update = await check();
+        if (cancelled) return;
+        if (update) {
+          setLatestVersion(update.version);
+          setUpdateStatus("available");
+        } else {
+          setUpdateStatus("current");
+        }
+      } catch (e) {
+        console.error("[updater] check failed", e);
+        if (!cancelled) setUpdateStatus("idle");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function checkAgain() {
+    setUpdateStatus("checking");
     try {
+      const { check } = await import("@tauri-apps/plugin-updater");
       const update = await check();
       if (update) {
-        setUpdateInfo({ version: update.version, body: update.body });
-        setUpdateState("available");
+        setLatestVersion(update.version);
+        setUpdateStatus("available");
       } else {
-        setUpdateState("none");
+        setUpdateStatus("current");
       }
-    } catch {
-      setUpdateState("none");
+    } catch (e) {
+      console.error("[updater] check failed", e);
+      setUpdateStatus("idle");
     }
   }
 
-  async function downloadAndInstall() {
-    setUpdateState("downloading");
+  async function restartAndInstall() {
+    if (busy) return;
+    setBusy(true);
     try {
+      const { check } = await import("@tauri-apps/plugin-updater");
       const update = await check();
       if (update) {
         await update.downloadAndInstall();
-        setUpdateState("done");
+        await emit("app:restart");
       }
-    } catch {}
+    } catch (e) {
+      console.error("[updater] install failed", e);
+      setUpdateStatus("idle");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -508,24 +546,26 @@ function AboutTab() {
           GitHub <ExternalLink className="size-3" />
         </button>
       </div>
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">v{appVersion}</span>
-        <Button variant="outline" size="xs" onClick={checkForUpdates} disabled={updateState === "checking"}>
-          {updateState === "checking" ? "Checking..." : updateState === "none" ? "No updates found" : updateState === "available" ? "Update available" : updateState === "done" ? "Installed" : "Check for Updates"}
-        </Button>
-      </div>
-      {updateInfo && updateState === "available" && (
-        <div className="flex flex-col gap-2">
-          {updateInfo.body && (
-            <div className="max-h-32 overflow-y-auto rounded-md bg-muted p-3 text-xs text-muted-foreground whitespace-pre-wrap">
-              {updateInfo.body}
-            </div>
-          )}
-          <Button variant="default" size="sm" onClick={downloadAndInstall}>
-            <Download /> Download &amp; Install
-          </Button>
+
+      <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
+        <div className="text-sm font-medium">Quill v{appVersion || "…"}</div>
+        <div className="text-xs text-muted-foreground">
+          {updateStatus === "checking" && "Checking for updates…"}
+          {updateStatus === "available" && `Update available: v${latestVersion}`}
+          {updateStatus === "current" && "Up to date"}
+          {updateStatus === "idle" && "Version info unavailable"}
         </div>
-      )}
+        <div className="flex gap-2">
+          <Button variant="outline" size="xs" onClick={checkAgain} disabled={updateStatus === "checking" || busy}>
+            Check again
+          </Button>
+          {updateStatus === "available" && (
+            <Button variant="default" size="xs" onClick={restartAndInstall} disabled={busy}>
+              {busy ? "Installing…" : "Restart & install"}
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
