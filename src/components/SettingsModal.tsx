@@ -541,9 +541,9 @@ function AboutTab() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span>Quill by <strong>Elixir-Piloting</strong></span>
-        <button onClick={() => openUrl("https://github.com/Elixir-Piloting")} className="inline-flex items-center gap-0.5 text-primary hover:underline">
-          GitHub <ExternalLink className="size-3" />
+        <span>Quill made by <strong>Stephen Mwaka</strong></span>
+        <button onClick={() => openUrl("https://work.elxr.studio")} className="inline-flex items-center gap-0.5 text-primary hover:underline">
+          Elxr.Studio <ExternalLink className="size-3" />
         </button>
       </div>
 
