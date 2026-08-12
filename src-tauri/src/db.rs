@@ -7,6 +7,40 @@ pub struct AppScopeEntry {
     pub exe: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+pub enum SubmitKey {
+    #[serde(rename = "enter")]
+    Enter,
+    #[serde(rename = "shift_enter")]
+    ShiftEnter,
+    #[serde(rename = "ctrl_enter")]
+    CtrlEnter,
+    #[serde(rename = "tab")]
+    Tab,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SubmitOnCompletion {
+    pub enabled: bool,
+    pub key: SubmitKey,
+    pub delay_ms: u32,
+}
+
+impl SubmitOnCompletion {
+    /// Serialize to the stored DB column (empty string = disabled).
+    pub fn to_storage(&self) -> String {
+        serde_json::to_string(self).unwrap_or_default()
+    }
+
+    /// Parse from the stored DB column; empty/invalid = disabled.
+    pub fn from_storage(s: &str) -> Option<SubmitOnCompletion> {
+        if s.trim().is_empty() {
+            return None;
+        }
+        serde_json::from_str(s).ok()
+    }
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct Snippet {
     pub id: i64,
@@ -14,6 +48,7 @@ pub struct Snippet {
     pub expansion: String,
     pub whole_word: bool,
     pub app_scope: String,
+    pub submit_on_completion: Option<SubmitOnCompletion>,
     pub folder_id: Option<i64>,
     pub created_at: String,
 }
@@ -57,6 +92,8 @@ pub fn init_db(db_path: &str) -> Result<Connection> {
             trigger TEXT NOT NULL UNIQUE,
             expansion TEXT NOT NULL,
             whole_word INTEGER NOT NULL DEFAULT 1,
+            app_scope TEXT NOT NULL DEFAULT '[]',
+            submit_on_completion TEXT NOT NULL DEFAULT '',
             folder_id INTEGER,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -96,6 +133,9 @@ pub fn init_db(db_path: &str) -> Result<Connection> {
     );
     let _ = conn.execute_batch(
         "ALTER TABLE snippets ADD COLUMN app_scope TEXT NOT NULL DEFAULT '[]';",
+    );
+    let _ = conn.execute_batch(
+        "ALTER TABLE snippets ADD COLUMN submit_on_completion TEXT NOT NULL DEFAULT '';",
     );
     let _ = conn.execute_batch(
         "ALTER TABLE snippets ADD COLUMN folder_id INTEGER REFERENCES folders(id);",
@@ -226,7 +266,7 @@ pub fn get_folder_by_name(conn: &Connection, name: &str) -> Result<Option<Folder
 
 pub fn get_all_snippets(conn: &Connection) -> Result<Vec<Snippet>> {
     let mut stmt = conn.prepare(
-        "SELECT id, trigger, expansion, whole_word, app_scope, folder_id, created_at
+        "SELECT id, trigger, expansion, whole_word, app_scope, submit_on_completion, folder_id, created_at
          FROM snippets ORDER BY created_at DESC",
     )?;
     let snippets = stmt
@@ -237,8 +277,9 @@ pub fn get_all_snippets(conn: &Connection) -> Result<Vec<Snippet>> {
                 expansion: row.get(2)?,
                 whole_word: row.get::<_, i64>(3)? != 0,
                 app_scope: row.get(4)?,
-                folder_id: row.get(5)?,
-                created_at: row.get(6)?,
+                submit_on_completion: SubmitOnCompletion::from_storage(&row.get::<_, String>(5)?),
+                folder_id: row.get(6)?,
+                created_at: row.get(7)?,
             })
         })?
         .collect::<Result<Vec<_>>>()?;
@@ -251,15 +292,17 @@ pub fn add_snippet(
     expansion: &str,
     whole_word: bool,
     app_scope: &str,
+    submit_on_completion: Option<&SubmitOnCompletion>,
     folder_id: Option<i64>,
 ) -> Result<()> {
     let fid = match folder_id {
         Some(id) => id,
         None => get_or_create_uncategorized(conn)?,
     };
+    let submit = submit_on_completion.map(|s| s.to_storage()).unwrap_or_default();
     conn.execute(
-        "INSERT INTO snippets (trigger, expansion, whole_word, app_scope, folder_id) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![trigger, expansion, whole_word as i64, app_scope, fid],
+        "INSERT INTO snippets (trigger, expansion, whole_word, app_scope, submit_on_completion, folder_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![trigger, expansion, whole_word as i64, app_scope, submit, fid],
     )?;
     Ok(())
 }
@@ -271,15 +314,17 @@ pub fn update_snippet(
     expansion: &str,
     whole_word: bool,
     app_scope: &str,
+    submit_on_completion: Option<&SubmitOnCompletion>,
     folder_id: Option<i64>,
 ) -> Result<()> {
     let fid = match folder_id {
         Some(id) => id,
         None => get_or_create_uncategorized(conn)?,
     };
+    let submit = submit_on_completion.map(|s| s.to_storage()).unwrap_or_default();
     conn.execute(
-        "UPDATE snippets SET trigger = ?1, expansion = ?2, whole_word = ?3, app_scope = ?4, folder_id = ?5 WHERE id = ?6",
-        params![trigger, expansion, whole_word as i64, app_scope, fid, id],
+        "UPDATE snippets SET trigger = ?1, expansion = ?2, whole_word = ?3, app_scope = ?4, submit_on_completion = ?5, folder_id = ?6 WHERE id = ?7",
+        params![trigger, expansion, whole_word as i64, app_scope, submit, fid, id],
     )?;
     Ok(())
 }
@@ -289,8 +334,8 @@ pub fn delete_snippet(conn: &Connection, id: i64) -> Result<()> {
     Ok(())
 }
 
-pub fn get_all_triggers(conn: &Connection) -> Result<Vec<(i64, String, String, bool, String)>> {
-    let mut stmt = conn.prepare("SELECT id, trigger, expansion, whole_word, app_scope FROM snippets ORDER BY LENGTH(trigger) DESC")?;
+pub fn get_all_triggers(conn: &Connection) -> Result<Vec<(i64, String, String, bool, String, Option<SubmitOnCompletion>)>> {
+    let mut stmt = conn.prepare("SELECT id, trigger, expansion, whole_word, app_scope, submit_on_completion FROM snippets ORDER BY LENGTH(trigger) DESC")?;
     let triggers = stmt
         .query_map([], |row| {
             Ok((
@@ -299,6 +344,7 @@ pub fn get_all_triggers(conn: &Connection) -> Result<Vec<(i64, String, String, b
                 row.get::<_, String>(2)?,
                 row.get::<_, i64>(3)? != 0,
                 row.get::<_, String>(4)?,
+                SubmitOnCompletion::from_storage(&row.get::<_, String>(5)?),
             ))
         })?
         .collect::<Result<Vec<_>>>()?;
@@ -360,7 +406,29 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
          INSERT OR IGNORE INTO variables (name, value, kind) VALUES ('clipboard', '', 'clipboard');
          INSERT OR IGNORE INTO settings (key, value) VALUES ('hotkey', 'Alt+Space');",
     )?;
+    seed_default_script(conn)?;
     Ok(())
+}
+
+/// Seed a single example "Script"-type variable on true first run. The
+/// `has_seeded_default_script` setting flag ensures it is never re-added
+/// after the user deletes it.
+fn seed_default_script(conn: &Connection) -> Result<()> {
+    if get_setting(conn, "has_seeded_default_script")?.is_some() {
+        return Ok(());
+    }
+    let config = serde_json::json!({
+        "description": "Example script — fetches your current public IP address. Use this as a template for your own scripts.",
+        "source": { "source": "inline", "command": "(Invoke-RestMethod -Uri \"https://api.ipify.org\")" },
+        "shell": { "shell": "powershell" },
+        "timeout_ms": 5000,
+        "trim_output": true
+    });
+    let _ = conn.execute(
+        "INSERT INTO variables (name, value, kind) VALUES ('Public IP Address', ?1, 'script')",
+        params![config.to_string()],
+    );
+    set_setting(conn, "has_seeded_default_script", "1")
 }
 
 // ── Form Inputs ──

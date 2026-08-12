@@ -3,6 +3,7 @@ mod export;
 mod hook;
 mod injection;
 mod process;
+mod scripts;
 mod starter;
 mod state;
 mod tray;
@@ -53,10 +54,11 @@ fn add_snippet(
     expansion: String,
     whole_word: bool,
     app_scope: String,
+    submit_on_completion: Option<db::SubmitOnCompletion>,
     folder_id: Option<i64>,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(friendly_error)?;
-    db::add_snippet(&conn, &trigger, &expansion, whole_word, &app_scope, folder_id)
+    db::add_snippet(&conn, &trigger, &expansion, whole_word, &app_scope, submit_on_completion.as_ref(), folder_id)
         .map_err(friendly_error)
 }
 
@@ -68,10 +70,11 @@ fn update_snippet(
     expansion: String,
     whole_word: bool,
     app_scope: String,
+    submit_on_completion: Option<db::SubmitOnCompletion>,
     folder_id: Option<i64>,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(friendly_error)?;
-    db::update_snippet(&conn, id, &trigger, &expansion, whole_word, &app_scope, folder_id)
+    db::update_snippet(&conn, id, &trigger, &expansion, whole_word, &app_scope, submit_on_completion.as_ref(), folder_id)
         .map_err(friendly_error)
 }
 
@@ -243,7 +246,14 @@ fn submit_form_injection(
         }
         std::thread::sleep(std::time::Duration::from_millis(300));
         eprintln!("[quill] submit_form_injection: injecting form text");
-        injection::inject_form_text_with_casing(&data.expansion, &values, state.inner(), casing);
+        injection::inject_form_text_maybe_script(
+            &data.trigger,
+            &data.expansion,
+            &values,
+            data.submit_on_completion,
+            state.inner(),
+            casing,
+        );
     } else {
         eprintln!("[quill] submit_form_injection: no pending data found");
     }
@@ -277,6 +287,25 @@ fn get_paused(state: tauri::State<'_, Arc<AppState>>) -> bool {
 #[tauri::command]
 fn get_running_apps() -> Vec<process::AppEntry> {
     process::get_running_apps()
+}
+
+// ── Script commands ──
+
+#[tauri::command]
+async fn run_script_test(config: scripts::ScriptVariable) -> Result<String, String> {
+    let ctx = scripts::ScriptContext {
+        trigger: String::new(),
+        app: process::get_foreground_exe(),
+        variables: HashMap::new(),
+    };
+    scripts::run_script(&config, &ctx)
+        .await
+        .map_err(|e| e.user_message())
+}
+
+#[tauri::command]
+fn get_wsl_available(state: tauri::State<'_, Arc<AppState>>) -> bool {
+    state.wsl_available.load(Ordering::SeqCst)
 }
 
 // ── Starter pack command ──
@@ -325,7 +354,7 @@ fn execute_import(
 // ── Popup commands ──
 
 #[tauri::command]
-fn close_and_inject(trigger: String, expansion: String, state: tauri::State<'_, Arc<AppState>>, app: tauri::AppHandle) {
+fn close_and_inject(trigger: String, expansion: String, submit_on_completion: Option<db::SubmitOnCompletion>, state: tauri::State<'_, Arc<AppState>>, app: tauri::AppHandle) {
     eprintln!("[quill] close_and_inject entered — trigger={trigger}, expansion={expansion}");
     state.cancelling.store(false, Ordering::SeqCst);
 
@@ -355,6 +384,7 @@ fn close_and_inject(trigger: String, expansion: String, state: tauri::State<'_, 
                     typed_trigger: String::new(),
                     expansion: expansion.clone(),
                     fields: referenced.clone(),
+                    submit_on_completion: submit_on_completion.clone(),
                 });
                 eprintln!("[quill] close_and_inject: pending_form set with trigger={trigger}");
             });
@@ -371,7 +401,7 @@ fn close_and_inject(trigger: String, expansion: String, state: tauri::State<'_, 
 
     if !has_form {
         eprintln!("[quill] close_and_inject: injecting text directly");
-        injection::inject_text(&expansion, &state.inner());
+        injection::inject_text_maybe_script(&trigger, &expansion, submit_on_completion, state.inner(), injection::CasingMode::Lower);
     }
 
     if let Some(popup) = app.get_webview_window("search") {
@@ -552,6 +582,7 @@ pub fn run() {
                 paused: std::sync::atomic::AtomicBool::new(false),
                 injecting: std::sync::atomic::AtomicBool::new(false),
                 cancelling: std::sync::atomic::AtomicBool::new(false),
+                wsl_available: std::sync::atomic::AtomicBool::new(scripts::wsl_available()),
                 pending_form: Mutex::new(None),
                 app_handle: Mutex::new(Some(app.handle().clone())),
             });
@@ -628,6 +659,8 @@ pub fn run() {
             set_hotkey,
             open_search_popup,
             get_running_apps,
+            run_script_test,
+            get_wsl_available,
             export_data,
             validate_import,
             execute_import,

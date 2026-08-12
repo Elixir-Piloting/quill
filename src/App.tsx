@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isEnabled as autoStartIsEnabled, enable as autoStartEnable, disable as autoStartDisable } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { X } from "lucide-react";
+import { X, Loader2, AlertTriangle } from "lucide-react";
 import Popup from "./Popup";
 import FormPopup from "./FormPopup";
 import Titlebar from "./components/Titlebar";
@@ -23,12 +23,21 @@ function App() {
 
 // ── Types ──
 
+export type SubmitKey = "enter" | "shift_enter" | "ctrl_enter" | "tab";
+
+export interface SubmitOnCompletion {
+  enabled: boolean;
+  key: SubmitKey;
+  delay_ms: number;
+}
+
 export interface Snippet {
   id: number;
   trigger: string;
   expansion: string;
   whole_word: boolean;
   app_scope: string;
+  submit_on_completion: SubmitOnCompletion | null;
   folder_id: number | null;
   created_at: string;
 }
@@ -108,6 +117,33 @@ function AppShell() {
   // Update toast
   const [updateToast, setUpdateToast] = useState<{ version: string; body?: string } | null>(null);
 
+  // Script expansion indicator / error toast
+  const [scriptExpanding, setScriptExpanding] = useState(false);
+  const [scriptError, setScriptError] = useState<string | null>(null);
+  const scriptTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const unlisten = listen<{ running: boolean; error?: string }>("script-expansion", (e) => {
+      const { running, error } = e.payload;
+      if (scriptTimer.current) {
+        clearTimeout(scriptTimer.current);
+        scriptTimer.current = null;
+      }
+      if (running) {
+        setScriptError(null);
+        // Only show the indicator if the expansion takes a noticeable while
+        scriptTimer.current = setTimeout(() => setScriptExpanding(true), 300);
+      } else {
+        setScriptExpanding(false);
+        if (error) {
+          setScriptError(error);
+          scriptTimer.current = setTimeout(() => setScriptError(null), 10000);
+        }
+      }
+    });
+    return () => { unlisten.then((f) => f()); };
+  }, []);
+
   // Settings state
   const [closeToTray, setCloseToTray] = useState(() => localStorage.getItem("quill-close-to-tray") !== "false");
   const [runOnBoot, setRunOnBoot] = useState(() => localStorage.getItem("quill-run-on-boot") === "true");
@@ -176,6 +212,26 @@ function AppShell() {
             </button>
           </div>
           <button onClick={() => setUpdateToast(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
+      {scriptExpanding && (
+        <div className="fixed bottom-4 left-4 z-50 flex items-center gap-2 rounded-xl border bg-popover px-4 py-2.5 shadow-xl ring-1 ring-border">
+          <Loader2 className="size-4 animate-spin text-primary" />
+          <span className="text-xs font-medium">Expanding…</span>
+        </div>
+      )}
+
+      {scriptError && (
+        <div className="fixed bottom-4 right-4 z-50 flex w-80 items-start gap-3 rounded-xl border bg-popover p-4 shadow-xl ring-1 ring-border">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-destructive">Script failed</p>
+            <p className="mt-1 text-xs text-muted-foreground">{scriptError}</p>
+          </div>
+          <button onClick={() => setScriptError(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
             <X className="size-4" />
           </button>
         </div>

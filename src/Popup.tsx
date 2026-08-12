@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { SubmitOnCompletion } from "./App";
 
 interface Snippet {
   id: number;
   trigger: string;
   expansion: string;
   whole_word: boolean;
+  submit_on_completion: SubmitOnCompletion | null;
   created_at: string;
 }
 
@@ -38,7 +40,7 @@ function Popup() {
   async function select(idx: number) {
     const s = filtered[idx];
     if (!s) return;
-    await invoke("close_and_inject", { trigger: s.trigger, expansion: s.expansion });
+    await invoke("close_and_inject", { trigger: s.trigger, expansion: s.expansion, submitOnCompletion: s.submit_on_completion });
   }
 
   function handleKey(e: React.KeyboardEvent) {

@@ -59,7 +59,7 @@ pub fn install_pack(conn: &Connection, name: &str) -> Result<StarterPackResult, 
     let existing_triggers: Vec<String> = crate::db::get_all_triggers(conn)
         .map_err(|e| e.to_string())?
         .iter()
-        .map(|(_, t, _, _, _)| t.clone())
+        .map(|(_, t, _, _, _, _)| t.clone())
         .collect();
 
     let mut added = 0u32;
@@ -69,7 +69,7 @@ pub fn install_pack(conn: &Connection, name: &str) -> Result<StarterPackResult, 
         if existing_triggers.contains(&s.trigger) {
             skipped += 1;
         } else {
-            crate::db::add_snippet(conn, &s.trigger, &s.expansion, true, "[]", Some(folder_id))
+            crate::db::add_snippet(conn, &s.trigger, &s.expansion, true, "[]", None, Some(folder_id))
                 .map_err(|e| e.to_string())?;
             added += 1;
         }

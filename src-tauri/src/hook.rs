@@ -50,7 +50,7 @@ pub fn start_hook(state: Arc<AppState>) {
                 let foreground_exe = process::get_foreground_exe();
 
                 let mut matched_idx: Option<usize> = None;
-                for (i, (_sid, trigger, _expansion, whole_word, app_scope)) in triggers.iter().enumerate() {
+                for (i, (_sid, trigger, _expansion, whole_word, app_scope, _submit)) in triggers.iter().enumerate() {
                     if !matches_trigger(&current, trigger, *whole_word) {
                         continue;
                     }
@@ -73,7 +73,7 @@ pub fn start_hook(state: Arc<AppState>) {
                 }
 
                 if let Some(idx) = matched_idx {
-                    let (_sid, trigger, expansion, _whole_word, _app_scope) = &triggers[idx];
+                    let (_sid, trigger, expansion, _whole_word, _app_scope, submit) = &triggers[idx];
                     let typed_trigger: String = current.chars().rev().take(trigger.len()).collect::<Vec<_>>().into_iter().rev().collect();
 
                     if let Ok(mut buf) = state.buffer.lock() {
@@ -102,6 +102,7 @@ pub fn start_hook(state: Arc<AppState>) {
                                         typed_trigger: typed_trigger.clone(),
                                         expansion: expansion.clone(),
                                         fields: referenced,
+                                        submit_on_completion: submit.clone(),
                                     });
                                     eprintln!("[quill] hook: pending_form set (keyboard path)");
                                 }
@@ -122,7 +123,7 @@ pub fn start_hook(state: Arc<AppState>) {
                             eprintln!("[quill] hook: failed to get app_handle for form popup");
                         }
                     } else {
-                        injection::replace_text_with_casing(trigger, expansion, &state, casing);
+                        injection::replace_text_maybe_script(trigger, expansion, submit.clone(), &state, casing);
                     }
                 }
             }

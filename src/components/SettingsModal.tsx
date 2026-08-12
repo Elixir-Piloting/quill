@@ -5,7 +5,7 @@ import { save, open } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { Button } from "@/components/ui/button";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, Download, UploadIcon, DownloadIcon } from "lucide-react";
+import { ExternalLink, Download, UploadIcon, DownloadIcon, ChevronDown, ChevronUp } from "lucide-react";
 import HotkeyRecorder from "./HotkeyRecorder";
 
 type Theme = "system" | "light" | "dark";
@@ -32,6 +32,8 @@ interface Props {
 interface ImportPreview {
   snippet_count: number;
   variable_count: number;
+  script_count: number;
+  scripts: { name: string; command: string }[];
   form_input_count: number;
   version: number;
   is_version_future: boolean;
@@ -40,6 +42,7 @@ interface ImportPreview {
 interface ImportResult {
   snippets_imported: number;
   variables_imported: number;
+  scripts_imported: number;
   form_inputs_imported: number;
   duplicates_skipped: number;
 }
@@ -80,6 +83,8 @@ function SettingsModal(props: Props) {
   const [importing, setImporting] = useState(false);
   const [installingPack, setInstallingPack] = useState<string | null>(null);
   const [packResults, setPackResults] = useState<Record<string, StarterPackResult>>({});
+  const [scriptWarning, setScriptWarning] = useState(false);
+  const [reviewScripts, setReviewScripts] = useState(false);
 
   if (!props.open) return null;
 
@@ -142,6 +147,27 @@ function SettingsModal(props: Props) {
     setImportFilePath("");
     setImportMode("merge");
     setReplaceConfirmed(false);
+    setScriptWarning(false);
+    setReviewScripts(false);
+  }
+
+  function onImportClick() {
+    if (importPreview && importPreview.script_count > 0) {
+      setScriptWarning(true);
+      setReviewScripts(false);
+    } else {
+      confirmImport();
+    }
+  }
+
+  function closeScriptWarning() {
+    setScriptWarning(false);
+    setReviewScripts(false);
+  }
+
+  function importAnyway() {
+    closeScriptWarning();
+    confirmImport();
   }
 
   async function installPack(key: string) {
@@ -211,6 +237,9 @@ function SettingsModal(props: Props) {
                 <h3 className="text-sm font-semibold">Import Complete</h3>
                 <p className="text-xs text-muted-foreground">
                   Imported {importResult.snippets_imported} snippets, {importResult.variables_imported} variables, {importResult.form_inputs_imported} form inputs.
+                  {importResult.scripts_imported > 0 && (
+                    <> {importResult.scripts_imported} script{importResult.scripts_imported > 1 ? "s" : ""}.</>
+                  )}
                   {importResult.duplicates_skipped > 0 && (
                     <> {importResult.duplicates_skipped} duplicates skipped.</>
                   )}
@@ -227,6 +256,12 @@ function SettingsModal(props: Props) {
                   <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
                     This export file uses format v{importPreview.version}, which is newer than the currently supported v1.
                     Some data may not import correctly.
+                  </div>
+                )}
+
+                {importPreview.script_count > 0 && (
+                  <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
+                    ⚠ This pack includes {importPreview.script_count} script{importPreview.script_count > 1 ? "s" : ""} that will run commands on your system when triggered.
                   </div>
                 )}
 
@@ -279,7 +314,7 @@ function SettingsModal(props: Props) {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={confirmImport}
+                    onClick={onImportClick}
                     disabled={importing || (importMode === "replace" && !replaceConfirmed)}
                   >
                     {importing ? "Importing..." : "Import"}
@@ -287,6 +322,45 @@ function SettingsModal(props: Props) {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Script import security warning */}
+      {scriptWarning && importPreview && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50" onMouseDown={closeScriptWarning}>
+          <div className="w-[440px] rounded-xl bg-popover p-5 shadow-2xl ring-1 ring-border" onMouseDown={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold">Import contains scripts</h3>
+            <p className="mt-2 text-xs text-muted-foreground">
+              This pack includes <span className="font-medium text-foreground">{importPreview.script_count}</span> script{importPreview.script_count > 1 ? "s" : ""} that will run commands on your system when triggered. Only import packs from sources you trust.
+            </p>
+
+            <div className="mt-3 flex flex-col gap-2">
+              <button
+                className="inline-flex items-center gap-1 self-start text-xs font-medium text-primary hover:underline"
+                onClick={() => setReviewScripts(!reviewScripts)}
+              >
+                {reviewScripts ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                Review Scripts
+              </button>
+              {reviewScripts && (
+                <div className="flex max-h-48 flex-col gap-2 overflow-y-auto rounded-lg border bg-card p-2">
+                  {importPreview.scripts.map((s) => (
+                    <div key={s.name} className="flex flex-col gap-0.5">
+                      <span className="font-mono text-xs font-medium">{s.name}</span>
+                      <pre className="overflow-x-auto rounded-md bg-muted p-2 font-mono text-[11px] whitespace-pre-wrap text-muted-foreground">
+                        {s.command || "(no command)"}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={closeScriptWarning}>Cancel</Button>
+              <Button variant="default" size="sm" onClick={importAnyway}>Import Anyway</Button>
+            </div>
           </div>
         </div>
       )}

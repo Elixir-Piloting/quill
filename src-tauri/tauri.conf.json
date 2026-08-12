@@ -14,9 +14,9 @@
       {
         "label": "main",
         "title": "Quill",
-        "width": 800,
+        "width": 950,
         "height": 600,
-        "minWidth": 850,
+        "minWidth": 900,
         "minHeight": 650,
         "center": true,
         "resizable": true,

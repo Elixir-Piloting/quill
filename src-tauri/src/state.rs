@@ -7,6 +7,7 @@ pub struct PendingFormData {
     pub typed_trigger: String,
     pub expansion: String,
     pub fields: Vec<db::FormInput>,
+    pub submit_on_completion: Option<db::SubmitOnCompletion>,
 }
 
 pub struct AppState {
@@ -15,6 +16,7 @@ pub struct AppState {
     pub paused: AtomicBool,
     pub injecting: AtomicBool,
     pub cancelling: AtomicBool,
+    pub wsl_available: AtomicBool,
     pub pending_form: Mutex<Option<PendingFormData>>,
     pub app_handle: Mutex<Option<tauri::AppHandle>>,
 }

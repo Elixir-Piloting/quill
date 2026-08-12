@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::db;
 
-const EXPORT_VERSION: u32 = 3;
+const EXPORT_VERSION: u32 = 4;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExportData {
@@ -21,6 +21,8 @@ pub struct ExportedSnippet {
     pub expansion: String,
     pub whole_word: bool,
     pub app_scope: String,
+    #[serde(default)]
+    pub submit_on_completion: Option<db::SubmitOnCompletion>,
     #[serde(default)]
     pub folder: Option<String>,
     pub created_at: String,
@@ -57,9 +59,17 @@ pub struct ExportedFolder {
 }
 
 #[derive(Debug, Serialize)]
+pub struct ImportedScriptInfo {
+    pub name: String,
+    pub command: String,
+}
+
+#[derive(Debug, Serialize)]
 pub struct ImportPreview {
     pub snippet_count: usize,
     pub variable_count: usize,
+    pub script_count: usize,
+    pub scripts: Vec<ImportedScriptInfo>,
     pub form_input_count: usize,
     pub folder_count: usize,
     pub version: u32,
@@ -70,6 +80,7 @@ pub struct ImportPreview {
 pub struct ImportResult {
     pub snippets_imported: usize,
     pub variables_imported: usize,
+    pub scripts_imported: usize,
     pub form_inputs_imported: usize,
     pub folders_imported: usize,
     pub duplicates_skipped: usize,
@@ -103,6 +114,7 @@ pub fn build_export(conn: &rusqlite::Connection) -> Result<String, String> {
                 expansion: s.expansion,
                 whole_word: s.whole_word,
                 app_scope: s.app_scope,
+                submit_on_completion: s.submit_on_completion,
                 folder: s.folder_id.and_then(|id| folder_map.get(&id).cloned()),
                 created_at: s.created_at,
             })
@@ -149,14 +161,46 @@ pub fn validate_import(json: &str) -> Result<ImportPreview, String> {
     let data: ExportData = serde_json::from_str(json)
         .map_err(|_| "This file couldn't be read as a valid Quill export.".to_string())?;
 
+    let scripts: Vec<ImportedScriptInfo> = data
+        .variables
+        .iter()
+        .filter(|v| v.kind == "script")
+        .map(|v| ImportedScriptInfo {
+            name: v.name.clone(),
+            command: script_command_display(&v.value),
+        })
+        .collect();
+
     Ok(ImportPreview {
         snippet_count: data.snippets.len(),
         variable_count: data.variables.len(),
+        script_count: scripts.len(),
+        scripts,
         form_input_count: data.form_inputs.len(),
         folder_count: data.folders.len(),
         version: data.version,
         is_version_future: data.version > EXPORT_VERSION,
     })
+}
+
+/// Human-readable command (or script file invocation) for a Script variable's
+/// stored JSON value, used by the import warning's "Review Scripts" list.
+fn script_command_display(value: &str) -> String {
+    match serde_json::from_str::<crate::scripts::ScriptVariable>(value) {
+        Ok(config) => match &config.source {
+            crate::scripts::ScriptSource::Inline { command } => command.clone(),
+            crate::scripts::ScriptSource::File {
+                interpreter,
+                path,
+                extra_args,
+            } => {
+                let mut parts = vec![interpreter.clone(), path.to_string_lossy().to_string()];
+                parts.extend(extra_args.iter().cloned());
+                parts.join(" ")
+            }
+        },
+        Err(_) => value.to_string(),
+    }
 }
 
 pub fn execute_import(
@@ -177,6 +221,7 @@ pub fn execute_import(
     let mut duplicates_skipped = 0;
     let mut snippets_imported = 0;
     let mut variables_imported = 0;
+    let mut scripts_imported = 0;
     let mut form_inputs_imported = 0;
     let mut folders_imported = 0;
 
@@ -213,7 +258,7 @@ pub fn execute_import(
 
     for s in &data.snippets {
         let folder_id = s.folder.as_ref().and_then(|name| folder_name_to_id.get(&name.to_lowercase()).copied());
-        match db::add_snippet(conn, &s.trigger, &s.expansion, s.whole_word, &s.app_scope, folder_id) {
+        match db::add_snippet(conn, &s.trigger, &s.expansion, s.whole_word, &s.app_scope, s.submit_on_completion.as_ref(), folder_id) {
             Ok(_) => snippets_imported += 1,
             Err(e) => {
                 if e.to_string().contains("UNIQUE") {
@@ -228,7 +273,12 @@ pub fn execute_import(
     for v in &data.variables {
         let folder_id = v.folder.as_ref().and_then(|name| folder_name_to_id.get(&name.to_lowercase()).copied());
         match db::add_variable(conn, &v.name, &v.value, &v.kind, folder_id) {
-            Ok(_) => variables_imported += 1,
+            Ok(_) => {
+                variables_imported += 1;
+                if v.kind == "script" {
+                    scripts_imported += 1;
+                }
+            }
             Err(e) => {
                 if e.to_string().contains("UNIQUE") {
                     duplicates_skipped += 1;
@@ -265,6 +315,7 @@ pub fn execute_import(
     Ok(ImportResult {
         snippets_imported,
         variables_imported,
+        scripts_imported,
         form_inputs_imported,
         folders_imported,
         duplicates_skipped,

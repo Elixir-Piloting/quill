@@ -48,7 +48,8 @@ import {
   ComboboxChipsInput,
 } from "@/components/ui/combobox";
 
-import type { Snippet, Variable, VarKind, Folder } from "../App";
+import type { Snippet, Variable, VarKind, Folder, SubmitKey, SubmitOnCompletion } from "../App";
+import ScriptsTab, { type ScriptsTabHandle } from "../components/ScriptsTab";
 
 interface RunningApp {
   name: string;
@@ -148,9 +149,10 @@ const DATE_PRESETS = [
 ];
 
 export default function MainPage({ snippets, variables, onRefreshSnippets, onRefreshVariables }: Props) {
-  const [tab, setTab] = useState<"snippets" | "variables" | "forms">("snippets");
+  const [tab, setTab] = useState<"snippets" | "variables" | "forms" | "scripts">("snippets");
   const [confirmDlg, setConfirmDlg] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{ type: string; id: number; label: string } | null>(null);
+  const scriptsTabRef = useRef<ScriptsTabHandle>(null);
 
   // ── Folders ──
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -225,6 +227,9 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   const [trigger, setTrigger] = useState("");
   const [expansion, setExpansion] = useState("");
   const [wholeWord, setWholeWord] = useState(true);
+  const [submitEnabled, setSubmitEnabled] = useState(false);
+  const [submitKey, setSubmitKey] = useState<SubmitKey>("enter");
+  const [submitDelayMs, setSubmitDelayMs] = useState(75);
   const [snippetFolderId, setSnippetFolderId] = useState<number | null>(null);
   const [appScope, setAppScope] = useState<RunningApp[]>([]);
   const [scopeEnabled, setScopeEnabled] = useState(false);
@@ -256,6 +261,9 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
     setTrigger("");
     setExpansion("");
     setWholeWord(true);
+    setSubmitEnabled(false);
+    setSubmitKey("enter");
+    setSubmitDelayMs(75);
     setSnippetFolderId(selectedFolderId ?? uncategorizedFolderId);
     setAppScope([]);
     setScopeEnabled(false);
@@ -270,7 +278,9 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
     setTrigger(s.trigger);
     setExpansion(s.expansion);
     setWholeWord(s.whole_word);
-    setSnippetFolderId(s.folder_id ?? uncategorizedFolderId);
+    setSubmitEnabled(s.submit_on_completion?.enabled ?? false);
+    setSubmitKey(s.submit_on_completion?.key ?? "enter");
+    setSubmitDelayMs(s.submit_on_completion?.delay_ms ?? 75);
     const scope: RunningApp[] = (() => {
       try { return JSON.parse(s.app_scope || "[]"); } catch { return []; }
     })();
@@ -298,11 +308,14 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
     if (!trimmedExp) { setExpansionError("Required"); hasError = true; }
     if (hasError) return;
     const appScopeStr = JSON.stringify(scopeEnabled ? appScope : []);
+    const submitConfig: SubmitOnCompletion | null = submitEnabled
+      ? { enabled: true, key: submitKey, delay_ms: submitDelayMs }
+      : null;
     try {
       if (editingSnip) {
-        await invoke("update_snippet", { id: editingSnip.id, trigger: trimmedTrigger, expansion: trimmedExp, wholeWord, appScope: appScopeStr, folderId: snippetFolderId });
+        await invoke("update_snippet", { id: editingSnip.id, trigger: trimmedTrigger, expansion: trimmedExp, wholeWord, appScope: appScopeStr, submitOnCompletion: submitConfig, folderId: snippetFolderId });
       } else {
-        await invoke("add_snippet", { trigger: trimmedTrigger, expansion: trimmedExp, wholeWord, appScope: appScopeStr, folderId: snippetFolderId });
+        await invoke("add_snippet", { trigger: trimmedTrigger, expansion: trimmedExp, wholeWord, appScope: appScopeStr, submitOnCompletion: submitConfig, folderId: snippetFolderId });
       }
       setSnippetDlg(false);
       onRefreshSnippets();
@@ -376,9 +389,19 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   // ── Form Inputs ──
 
   const [formInputs, setFormInputs] = useState<FormInput[]>([]);
+  const scripts = variables.filter((v) => v.kind === "script");
+  const filteredScripts = (selectedFolderId === null
+    ? scripts
+    : scripts.filter((s) => s.folder_id === selectedFolderId)).filter((s) => {
+      if (!debouncedSearch) return true;
+      const c = (() => { try { return JSON.parse(s.value); } catch { return null; } })();
+      const desc = c?.description || "";
+      return s.name.toLowerCase().includes(debouncedSearch.toLowerCase())
+        || desc.toLowerCase().includes(debouncedSearch.toLowerCase());
+    });
   const filteredVariables = (selectedFolderId === null
-    ? variables
-    : variables.filter((v) => v.folder_id === selectedFolderId)).filter((v) => matchSearch({ trigger: v.name, expansion: v.value }));
+    ? variables.filter((v) => v.kind !== "script")
+    : variables.filter((v) => v.kind !== "script" && v.folder_id === selectedFolderId)).filter((v) => matchSearch({ trigger: v.name, expansion: v.value }));
   const filteredFormInputs = (selectedFolderId === null
     ? formInputs
     : formInputs.filter((f) => f.folder_id === selectedFolderId)).filter((f) => matchSearch({ trigger: f.name, expansion: f.label }));
@@ -472,7 +495,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
     if (pendingDelete.type === "snippet") {
       await invoke("delete_snippet", { id: pendingDelete.id });
       onRefreshSnippets();
-    } else if (pendingDelete.type === "variable") {
+    } else if (pendingDelete.type === "variable" || pendingDelete.type === "script") {
       await invoke("delete_variable", { id: pendingDelete.id });
       onRefreshVariables();
     } else if (pendingDelete.type === "form") {
@@ -488,12 +511,20 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
   function varDisplay(v: Variable): string {
     if (v.kind === "clipboard") return "Clipboard contents";
     if (v.kind === "date") return previewDate(v.value);
+    if (v.kind === "script") {
+      try {
+        const c = JSON.parse(v.value);
+        if (c?.description) return c.description;
+      } catch { /* fall through */ }
+      return "Runs a script";
+    }
     return truncate(v.value, 60);
   }
 
   function kindLabel(kind: string): string {
     if (kind === "date") return "date & time";
     if (kind === "clipboard") return "clipboard";
+    if (kind === "script") return "script";
     return "text";
   }
 
@@ -504,6 +535,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
           <div className="flex items-center gap-2">
             <Button variant={tab === "snippets" ? "default" : "outline"} size="sm" onClick={() => setTab("snippets")}>Snippets</Button>
             <Button variant={tab === "variables" ? "default" : "outline"} size="sm" onClick={() => setTab("variables")}>Variables</Button>
+            <Button variant={tab === "scripts" ? "default" : "outline"} size="sm" onClick={() => setTab("scripts")}>Scripts</Button>
             <Button variant={tab === "forms" ? "default" : "outline"} size="sm" onClick={() => { setTab("forms"); loadFormInputs(); }}>Form Inputs</Button>
           </div>
           <div className="relative mx-4 flex-1 max-w-md">
@@ -518,10 +550,11 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
           <Button size="sm" onClick={
             tab === "snippets" ? openNewSnippet :
             tab === "variables" ? openNewVariable :
+            tab === "scripts" ? () => scriptsTabRef.current?.openNew() :
             openNewForm
           }>
             <PlusIcon data-icon="start" />
-            Add {tab === "snippets" ? "Snippet" : tab === "variables" ? "Variable" : "Form Input"}
+            Add {tab === "snippets" ? "Snippet" : tab === "variables" ? "Variable" : tab === "scripts" ? "Script" : "Form Input"}
             {selectedFolderId !== null && folders.find((f) => f.id === selectedFolderId) &&
               ` to ${folders.find((f) => f.id === selectedFolderId)!.name}`}
           </Button>
@@ -537,7 +570,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
               onClick={() => setSelectedFolderId(null)}
             >
               <FolderIcon className="size-3.5" />
-              All {tab === "snippets" ? "Snippets" : tab === "variables" ? "Variables" : "Form Inputs"}
+              All {tab === "snippets" ? "Snippets" : tab === "variables" ? "Variables" : tab === "scripts" ? "Scripts" : "Form Inputs"}
             </button>
             {folders.filter((f) => f.name !== "Uncategorized").map((f) => (
               <div key={f.id} className="group flex items-center gap-1">
@@ -580,9 +613,9 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                 <Button variant="ghost" size="xs" className="w-full" onClick={openNewFolder}>
                   <PlusIcon className="size-3" /> New Folder
                 </Button>
-              </div>
+</div>
+</div>
             </div>
-          </div>
 
           {/* Content area */}
           <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden rounded-xl">
@@ -660,6 +693,16 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                   </Table>
                 )}
               </div>
+            ) : tab === "scripts" ? (
+              <ScriptsTab
+                ref={scriptsTabRef}
+                scripts={filteredScripts}
+                folders={folders}
+                selectedFolderId={selectedFolderId}
+                uncategorizedFolderId={uncategorizedFolderId}
+                onRefresh={onRefreshVariables}
+                onRequestDelete={(id, label) => requestDelete("script", id, label)}
+              />
             ) : (
               <div className="h-fit rounded-xl bg-card ring-1 ring-foreground/10">
                 {filteredFormInputs.length === 0 ? (
@@ -799,7 +842,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                 <span className="text-xs text-muted-foreground">Use <code className="font-mono text-primary">{`{cursor}`}</code> to set cursor position</span>
               </div>
               <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <label id="submit-scope" className="flex items-center gap-2 text-xs text-muted-foreground">
                   <input type="checkbox" checked={scopeEnabled} onChange={(e) => { setScopeEnabled(e.target.checked); if (!e.target.checked) setAppScope([]); }} className="size-3.5 accent-primary" />
                   Restrict to specific apps
                 </label>
@@ -846,6 +889,63 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
                   </Combobox>
                 )}
               </div>
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={submitEnabled} onChange={(e) => setSubmitEnabled(e.target.checked)} className="size-3.5 accent-primary" />
+                  Submit on completion
+                </label>
+                <p className="text-xs text-muted-foreground">Press a key (e.g. Enter) after the snippet is injected to send it. Only matters for snippets that fill an input.</p>
+                {submitEnabled && (
+                  <div className="flex flex-col gap-2 pl-5">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="submit-key" className="text-xs font-medium text-muted-foreground">Key</label>
+                      <Select value={submitKey} onValueChange={(v) => setSubmitKey(v as SubmitKey)}>
+                        <SelectTrigger id="submit-key" className="w-40">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="enter">Enter</SelectItem>
+                          <SelectItem value="shift_enter">Shift + Enter</SelectItem>
+                          <SelectItem value="ctrl_enter">Ctrl + Enter</SelectItem>
+                          <SelectItem value="tab">Tab</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <label htmlFor="submit-delay" className="text-xs font-medium text-muted-foreground">Delay</label>
+                        <span className="text-[10px] text-muted-foreground">Advanced timing</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="submit-delay"
+                          type="number"
+                          min={0}
+                          max={1000}
+                          value={submitDelayMs}
+                          onChange={(e) => {
+                            const n = Number(e.target.value);
+                            setSubmitDelayMs(Number.isFinite(n) ? Math.max(0, Math.min(1000, n)) : 0);
+                          }}
+                          className="w-24"
+                        />
+                        <span className="text-xs text-muted-foreground">ms</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {submitEnabled && !scopeEnabled && (
+                <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                  <span className="mt-px">&#9888;</span>
+                  <span>
+                    This snippet is not restricted to specific apps, so it can submit while you are typing in any window.{" "}
+                    <button type="button" className="underline underline-offset-2" onClick={() => document.getElementById("submit-scope")?.scrollIntoView({ behavior: "smooth", block: "nearest" })}>
+                      Review app restriction
+                    </button>
+                  </span>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button type="submit">{editingSnip ? "Update" : "Add"}</Button>
@@ -1050,7 +1150,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
       <Dialog open={confirmDlg} onOpenChange={setConfirmDlg}>
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
-            <DialogTitle>Delete {pendingDelete?.type === "snippet" ? "Snippet" : pendingDelete?.type === "variable" ? "Variable" : "Form Input"}?</DialogTitle>
+            <DialogTitle>Delete {pendingDelete?.type === "snippet" ? "Snippet" : pendingDelete?.type === "variable" ? "Variable" : pendingDelete?.type === "script" ? "Script" : "Form Input"}?</DialogTitle>
           </DialogHeader>
           <p className="py-2 text-sm text-muted-foreground">
             Are you sure you want to delete <span className="font-medium text-foreground">{pendingDelete?.label}</span>? This cannot be undone.
