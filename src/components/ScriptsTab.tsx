@@ -293,7 +293,8 @@ function ScriptsTab({ scripts, folders, selectedFolderId, uncategorizedFolderId,
   }
 
   function scriptDescription(v: Variable): string {
-    return parseConfig(v.value).description ?? "";
+    const desc = parseConfig(v.value).description ?? "";
+    return desc.length > 38 ? desc.slice(0, 38) + "…" : desc;
   }
 
   return (
