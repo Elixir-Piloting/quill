@@ -707,7 +707,7 @@ export default function MainPage({ snippets, variables, onRefreshSnippets, onRef
 
       {/* ═══ Snippet dialog ═══ */}
       <Dialog open={snippetDlg} onOpenChange={setSnippetDlg}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md">
           <form onSubmit={(e) => { e.preventDefault(); saveSnippet(); }}>
             <DialogHeader>
               <DialogTitle>{editingSnip ? "Edit Snippet" : "Add Snippet"}</DialogTitle>
