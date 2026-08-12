@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Quill",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "identifier": "com.dog.quill",
   "build": {
     "beforeDevCommand": "pnpm dev",
