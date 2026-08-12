@@ -1,11 +1,1 @@
-{
-  "version": "1.2.0",
-  "notes": "Settings shows real app version; form input dialog re-ordered (label first, name auto-gen, field type + required on same row); variable dialog name+type on same row",
-  "pub_date": "2026-07-15T00:00:00Z",
-  "platforms": {
-    "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRMzJEN2c3VTA3VkdtampKMTlHakx5MVNFUm5hemRtZ3BqNmJEdHZnUUFmeTQvOFZCWmQ2V3Z3UWs0SUt2NktPMUpEKzRWTGFxQ1QwaWhVeUxDbW42d3liaVRKbVhReHdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MDUwODYxCWZpbGU6UXVpbGxfMS4yLjBfeDY0X2VuLVVTLm1zaQpyWCtyUFk4MGFZamt1eXRHcFNJdEw4WmhiVVdJY1NFWUVCZVdhNGpRa2FoREpEOGl0QVB1KzZjNDVWa3ZNR3N4T0ZlTWR6ODRzNmFycDdJemJ3ZzREZz09Cg==",
-      "url": "https://github.com/Elixir-Piloting/quill/releases/download/v1.2.0/Quill_1.2.0_x64_en-US.msi"
-    }
-  }
-}
+{"version":"1.2.1","notes":"Quill v1.2.1","pub_date":"2026-08-12T16:13:28.982Z","platforms":{"windows-x86_64":{"url":"https://github.com/Elixir-Piloting/quill/releases/download/v1.2.1/Quill_1.2.1_x64-setup.exe","signature":"dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZUg4RGExeGx1WHJXWng1MzZsNERmQVdTQW5IMkpzNWVQek9FSTNmK1BDQlRJNWNvZUllTjI1OGJZV3ZLdXpscDZNRWRhSVowWlhNL1p6Mzg3SkVBL2pXYmZ4a3JUQUE0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg2NTUwOTk3CWZpbGU6UXVpbGxfMS4yLjFfeDY0LXNldHVwLmV4ZQo3K2ZxbG54czFvQk00bEwrNytZbkNYbzRCSHdGT2FZMFBNWk8rRlNvVmVmOEI2UXRUSlcwTzZ5aVd4T3VHQVR4RzJFaEsyVFJnM0dDZTJ5SFNITVJDQT09Cg=="}}}
