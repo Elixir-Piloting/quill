@@ -1,1 +1,11 @@
-{"version":"1.2.2","notes":"Quill v1.2.2","pub_date":"2026-08-12T16:27:53.743Z","platforms":{"windows-x86_64":{"url":"https://github.com/Elixir-Piloting/quill/releases/download/v1.2.2/Quill_1.2.2_x64-setup.exe","signature":"dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZUg4RGExeGx1WGlTV2JQajJvd2hTUVNReEJ3T3M5V1l2akFTUmVWdFVLUWt1cWpVcVI4dDc5ak42M1JVWFUzcGZBM2E3L3h5U0FvbjF2MGM5OTR0SlY5VDdqd2ZDc1FBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg2NTUxODUyCWZpbGU6UXVpbGxfMS4yLjJfeDY0LXNldHVwLmV4ZQpHUTJCbXRzMldlWEV1UlVuY2xtV0tFQ0tOZzhrdURmQVZyam9EUjRTNVZMTHBwRUgxckdzTHVRLy9FS05MRVdVb0FXS211dzRVMEtCMTNzK2U4SHZDUT09Cg=="}}}
+{
+  "version": "1.2.4",
+  "notes": "Quill v1.2.4",
+  "pub_date": "2026-10-05T15:45:36.021Z",
+  "platforms": {
+    "windows-x86_64": {
+      "url": "https://github.com/Elixir-Piloting/quill/releases/download/v1.2.4/Quill_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZUg4RGExeGx1WHBRNzkyMTJDYllJSWFqd2diQ1hwdnZGTktLVzBzeDNkTVlTOEFhMlY1YUdIVW1aTDI2SnpqamdsU1IrcHVTLzg3SFgvUjJXOEQ5MG5mNnN5MFArQ2dFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMjE1MTM1CWZpbGU6UXVpbGxfeDY0LXNldHVwLmV4ZQpDU0pWMXFXSVBvOVVMVFhhdzhaYmtFc2x3ZjE5MlRLcGpvc0h2cmlha3M4Z0EwTnh5cVVsZk5GMHdYMmFteHYzRE1ld2F5cjdxSWpFMHBiQXRhRS9BQT09Cg=="
+    }
+  }
+}
