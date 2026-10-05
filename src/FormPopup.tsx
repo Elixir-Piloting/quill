@@ -133,7 +133,7 @@ function FormPopup() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-popover text-popover-foreground" style={{ fontFamily: "Architects Daughter, sans-serif", letterSpacing: "0.5px" }}>
+    <div className="flex h-screen flex-col bg-popover text-popover-foreground" style={{ fontFamily: "Inter Tight Variable, sans-serif", letterSpacing: "0.5px" }}>
       <div className="flex shrink-0 items-center gap-2 px-3 py-2.5">
         <img src="/quill-icon.png" alt="" className="size-4 shrink-0 opacity-50" />
         <span className="text-sm font-medium text-card-foreground">Form — {trigger}</span>

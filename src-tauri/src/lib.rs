@@ -180,14 +180,14 @@ fn add_form_input(
     state: tauri::State<'_, Arc<AppState>>,
     name: String,
     label: String,
-    fieldType: String,
+    field_type: String,
     placeholder: String,
-    defaultValue: String,
+    default_value: String,
     required: bool,
     folder_id: Option<i64>,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(friendly_error)?;
-    db::add_form_input(&conn, &name, &label, &fieldType, &placeholder, &defaultValue, required, folder_id).map_err(friendly_error)
+    db::add_form_input(&conn, &name, &label, &field_type, &placeholder, &default_value, required, folder_id).map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -196,14 +196,14 @@ fn update_form_input(
     id: i64,
     name: String,
     label: String,
-    fieldType: String,
+    field_type: String,
     placeholder: String,
-    defaultValue: String,
+    default_value: String,
     required: bool,
     folder_id: Option<i64>,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(friendly_error)?;
-    db::update_form_input(&conn, id, &name, &label, &fieldType, &placeholder, &defaultValue, required, folder_id).map_err(friendly_error)
+    db::update_form_input(&conn, id, &name, &label, &field_type, &placeholder, &default_value, required, folder_id).map_err(friendly_error)
 }
 
 #[tauri::command]
@@ -596,6 +596,7 @@ pub fn run() {
             if let Err(e) = WebviewWindowBuilder::new(app.handle(), "form", WebviewUrl::App("index.html".into()))
                 .decorations(false)
                 .always_on_top(true)
+                .visible(false)
                 .inner_size(440.0, 320.0)
                 .center()
                 .title("Quill")

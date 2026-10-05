@@ -1,247 +1,110 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const ROOT = resolve(fileURLToPath(import.meta.url), "../..");
-const CARGO = resolve(ROOT, "src-tauri/Cargo.toml");
-const PKG = resolve(ROOT, "package.json");
-const TAURI = resolve(ROOT, "src-tauri/tauri.conf.json");
-const RELEASE_REPO = "Elixir-Piloting/quill";
-const SECRETS_FILE = resolve(ROOT, ".release-secrets.json");
-
-const KINDS = ["major", "minor", "patch"];
-
-function run(cmd, opts = {}) {
-  // Stream the child's stdout/stderr live so the release run is verbose.
-  const res = spawnSync(cmd, { cwd: ROOT, stdio: "inherit", shell: true, ...opts });
-  if (res.status !== 0) {
-    throw new Error(`${cmd}\nfailed (exit ${res.status}).`);
-  }
-  return "";
-}
-
-function runOk(cmd, opts = {}) {
-  const res = spawnSync(cmd, { cwd: ROOT, encoding: "utf8", shell: true, ...opts });
-  return (res.stdout || "").trim();
-}
-
-function readVersion() {
-  const cargo = readFileSync(CARGO, "utf8");
-  const m = cargo.match(/^version = "(\d+\.\d+\.\d+)"/m);
-  if (!m) throw new Error(`cannot parse version from ${CARGO}`);
-  return m[1];
-}
-
-export function nextVersion(current, kind) {
-  const [major, minor, patch] = current.split(".").map(Number);
-  switch (kind) {
-    case "major":
-      return `${major + 1}.0.0`;
-    case "minor":
-      return `${major}.${minor + 1}.0`;
-    case "patch":
-      return `${major}.${minor}.${patch + 1}`;
-    default:
-      throw new Error(`unknown bump kind: ${kind}`);
-  }
-}
+export const ROOT = resolve(fileURLToPath(import.meta.url), "../..");
+export const RELEASE_REPO = "Elixir-Piloting/quill";
+export const ASSET_NAME = "Quill_x64-setup.exe";
+export const VERSION_FILES = ["package.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "src-tauri/tauri.conf.json"];
 
 export function resolveKind(arg) {
-  if (!arg) return "patch";
-  const kind = arg.toLowerCase();
-  if (!KINDS.includes(kind)) {
-    throw new Error(`unknown bump kind: ${kind} (expected one of ${KINDS.join(", ")})`);
-  }
+  const kind = (arg || "patch").toLowerCase();
+  if (!["major", "minor", "patch"].includes(kind)) throw new Error(`Unknown bump kind: ${kind}`);
   return kind;
 }
 
-function writeVersion(version) {
-  const cargo = readFileSync(CARGO, "utf8");
-  writeFileSync(
-    CARGO,
-    cargo.replace(/^version = "\d+\.\d+\.\d+"/m, `version = "${version}"`),
-  );
-
-  const pkg = JSON.parse(readFileSync(PKG, "utf8"));
-  pkg.version = version;
-  writeFileSync(PKG, `${JSON.stringify(pkg, null, 2)}\n`);
-
-  const tauri = JSON.parse(readFileSync(TAURI, "utf8"));
-  tauri.version = version;
-  writeFileSync(TAURI, `${JSON.stringify(tauri, null, 2)}\n`);
+export function nextVersion(current, kind) {
+  if (!/^\d+\.\d+\.\d+$/.test(current)) throw new Error(`Invalid release version: ${current}`);
+  const [major, minor, patch] = current.split(".").map(Number);
+  switch (resolveKind(kind)) {
+    case "major": return `${major + 1}.0.0`;
+    case "minor": return `${major}.${minor + 1}.0`;
+    default: return `${major}.${minor}.${patch + 1}`;
+  }
 }
 
-// Read updater signing secrets from env vars, falling back to a gitignored
-// local file. `gh` uses its own keyring auth, so no GitHub token is needed here.
-function loadSecrets() {
-  let file = {};
-  if (existsSync(SECRETS_FILE)) {
-    file = JSON.parse(readFileSync(SECRETS_FILE, "utf8"));
+export function readVersion(root = ROOT) {
+  const pkg = JSON.parse(readFileSync(resolve(root, VERSION_FILES[0]), "utf8")).version;
+  const cargo = readFileSync(resolve(root, VERSION_FILES[1]), "utf8").match(/^version = "(\d+\.\d+\.\d+)"/m)?.[1];
+  const lock = readFileSync(resolve(root, VERSION_FILES[2]), "utf8").match(/\[\[package\]\]\r?\nname = "quill"\r?\nversion = "(\d+\.\d+\.\d+)"/)?.[1];
+  const tauri = JSON.parse(readFileSync(resolve(root, VERSION_FILES[3]), "utf8")).version;
+  if (!/^\d+\.\d+\.\d+$/.test(pkg) || [cargo, lock, tauri].some(version => version !== pkg)) {
+    throw new Error("Release versions must match in package.json, Cargo.toml, Cargo.lock, and tauri.conf.json.");
   }
-
-  const key =
-    process.env.TAURI_SIGNING_PRIVATE_KEY ||
-    (file.privateKeyPath && existsSync(file.privateKeyPath)
-      ? readFileSync(file.privateKeyPath, "utf8")
-      : "") ||
-    "";
-  const password =
-    process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || file.privateKeyPassword || "";
-
-  if (!key) {
-    throw new Error(
-      "updater signing private key not found. Set TAURI_SIGNING_PRIVATE_KEY (or point privateKeyPath) " +
-        `or create ${SECRETS_FILE} with { privateKeyPath, privateKeyPassword }.`,
-    );
-  }
-  if (!password) {
-    throw new Error(
-      "updater signing password not found. Set TAURI_SIGNING_PRIVATE_KEY_PASSWORD " +
-        `or create ${SECRETS_FILE} with privateKeyPassword.`,
-    );
-  }
-  return { key, password };
+  return pkg;
 }
 
-function bundleFiles(version) {
-  const dir = resolve(ROOT, "src-tauri/target/release/bundle/nsis");
-  if (!existsSync(dir)) {
-    throw new Error(`bundle dir not found: ${dir}`);
+export function writeVersion(version, root = ROOT) {
+  readVersion(root);
+  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Invalid release version: ${version}`);
+  for (const file of [VERSION_FILES[0], VERSION_FILES[3]]) {
+    const path = resolve(root, file);
+    const data = JSON.parse(readFileSync(path, "utf8"));
+    data.version = version;
+    writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`);
   }
-  const names = readdirSync(dir);
-  const exe = names.find((n) => n === `Quill_${version}_x64-setup.exe`);
-  const sig = names.find((n) => n === `${exe}.sig`);
-  if (!exe) {
-    throw new Error(`installer Quill_${version}_x64-setup.exe not found in ${dir}`);
-  }
-  if (!sig) {
-    throw new Error(`signature for ${exe} not found; did signing run?`);
-  }
-  return { dir, exe, sig };
+  const cargo = resolve(root, VERSION_FILES[1]);
+  writeFileSync(cargo, readFileSync(cargo, "utf8").replace(/^version = "\d+\.\d+\.\d+"/m, `version = "${version}"`));
+  const lock = resolve(root, VERSION_FILES[2]);
+  // Only the application package changes; dependency versions stay pinned.
+  writeFileSync(lock, readFileSync(lock, "utf8").replace(/(\[\[package\]\]\r?\nname = "quill"\r?\nversion = ")[^"]+/, (_match, prefix) => `${prefix}${version}`));
 }
 
-// `gh` uses its own keyring/creds auth (inherited by child processes); a
-// GH_TOKEN set in the parent env passes through automatically.
-function ghAuth() {
-  return "gh";
+function command(binary, args, capture = false) {
+  const result = spawnSync(binary, args, { cwd: ROOT, encoding: "utf8", stdio: capture ? "pipe" : "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`${binary} ${args.join(" ")} failed${capture ? `: ${result.stderr?.trim()}` : ""}`);
+  return capture ? result.stdout.trim() : "";
 }
 
-function publishToReleases(version, { dir, exe, sig }) {
-  const tag = `v${version}`;
-  const exePath = resolve(dir, exe);
-  const sigPath = resolve(dir, sig);
-
-  // GitHub rejects release create / contents PUT on a repo with no commits.
-  // Bootstrap an initial commit if the release repo is still empty.
-  const commits = runOk(`${ghAuth()} api /repos/${RELEASE_REPO}/commits`);
-  if (commits.trim() === "[]") {
-    runOk(
-      `${ghAuth()} api -X PUT /repos/${RELEASE_REPO}/contents/README.md ` +
-        `-f message="initial commit: release-repo bootstrap" ` +
-        `-f content="${Buffer.from("Quill release artifacts and update manifest\n").toString("base64")}"`,
-    );
+async function waitForRelease(sha, tag) {
+  let run;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const runs = JSON.parse(command("gh", ["run", "list", "--repo", RELEASE_REPO, "--workflow", "release.yml", "--event", "push", "--commit", sha, "--json", "databaseId,headBranch"], true));
+    run = runs.find(candidate => candidate.headBranch === tag);
+    if (run) break;
+    await new Promise(done => setTimeout(done, 2000));
   }
-
-  // Recreate the release so re-releases overwrite cleanly.
-  runOk(`${ghAuth()} release delete ${tag} --repo ${RELEASE_REPO} --yes`);
-  run(
-    `${ghAuth()} release create ${tag} --repo ${RELEASE_REPO} --title "Quill v${version}" ` +
-      `--notes "Quill v${version}"`,
-  );
-  run(`${ghAuth()} release upload ${tag} --repo ${RELEASE_REPO} --clobber "${exePath}" "${sigPath}"`);
-
-  // Publish update.json via the contents API (creates or overwrites the
-  // committed file), so no credential plumbing beyond `gh` is needed.
-  const manifest = {
-    version,
-    notes: `Quill v${version}`,
-    pub_date: new Date().toISOString(),
-    platforms: {
-      "windows-x86_64": {
-        url: `https://github.com/${RELEASE_REPO}/releases/download/${tag}/${exe}`,
-        signature: readFileSync(sigPath, "utf8").trim(),
-      },
-    },
-  };
-  const content = Buffer.from(JSON.stringify(manifest)).toString("base64");
-  // Overwriting an existing file requires its current SHA (contents API).
-  // Only trust the .sha when the request succeeds: a 404 also prints a JSON
-  // error body to stdout, so gate on the exit code rather than the content.
-  const existingRes = spawnSync(
-    `${ghAuth()} api /repos/${RELEASE_REPO}/contents/update.json -q .sha`,
-    { cwd: ROOT, encoding: "utf8", shell: true },
-  );
-  const existing =
-    existingRes.status === 0 ? (existingRes.stdout || "").trim() : "";
-  const shaArg = existing ? ` -f sha="${existing}"` : "";
-  run(
-    `${ghAuth()} api -X PUT /repos/${RELEASE_REPO}/contents/update.json ` +
-      `-f message="Update manifest for v${version}" -f content="${content}"${shaArg}`,
-  );
+  if (!run) throw new Error(`The tag was pushed, but its workflow hasn't appeared yet. Check https://github.com/${RELEASE_REPO}/actions`);
+  console.log(`Waiting for GitHub to build, sign, and publish ${tag}...`);
+  command("gh", ["run", "watch", String(run.databaseId), "--repo", RELEASE_REPO, "--exit-status", "--interval", "15"]);
+  // Pull the legacy updater manifest's bot commit after publication.
+  if (!command("git", ["status", "--porcelain"], true) && command("git", ["rev-parse", "HEAD"], true) === sha) {
+    command("git", ["fetch", "origin", "main"]);
+    command("git", ["merge", "--ff-only", "origin/main"]);
+  }
 }
 
-function main(argv) {
+async function main(argv) {
   const kind = resolveKind(argv[2]);
-
-  const dirty = runOk("git status --porcelain");
-  if (dirty) {
-    throw new Error("Working tree is not clean. Commit or stash before releasing.");
-  }
-
+  if (command("git", ["status", "--porcelain"], true)) throw new Error("Commit your changes before releasing.");
+  if (command("git", ["branch", "--show-current"], true) !== "main") throw new Error("Run the release command from main.");
+  command("gh", ["auth", "status"]);
+  command("gh", ["workflow", "view", "release.yml", "--repo", RELEASE_REPO], true);
+  command("git", ["fetch", "origin", "main", "--tags"]);
+  command("git", ["merge", "--ff-only", "origin/main"]);
   const current = readVersion();
   const next = nextVersion(current, kind);
-  console.log(`Releasing ${current} -> ${next} (${kind}).`);
-
-  const { key, password } = loadSecrets();
-  const signEnv = {
-    ...process.env,
-    TAURI_SIGNING_PRIVATE_KEY: key,
-    TAURI_SIGNING_PRIVATE_KEY_PASSWORD: password,
-  };
-
-  writeVersion(next);
-  console.log("Bumped versions. Building installer...");
-
-  const nsisDir = resolve(ROOT, "src-tauri/target/release/bundle/nsis");
-  const exeFile = `Quill_${next}_x64-setup.exe`;
-  const exePath = resolve(nsisDir, exeFile);
-  let bundle;
-
+  const tag = `v${next}`;
+  if (command("git", ["tag", "--list", tag], true)) throw new Error(`Tag ${tag} already exists.`);
+  const originals = VERSION_FILES.map(file => [file, readFileSync(resolve(ROOT, file))]);
   try {
-    run("pnpm run tauri build", { env: signEnv });
-
-    // `tauri build` does not always emit the updater signature, so stamp it
-    // explicitly (same as the old CI did).
-    console.log("Signing installer...");
-    run(`pnpm run tauri signer sign "${exePath}"`, { env: signEnv });
-
-    bundle = bundleFiles(next);
-  } catch (e) {
-    // Restore versions so a failed build/sign leaves no dirty tree (which
-    // would block a re-attempt).
-    writeVersion(current);
-    throw e;
+    writeVersion(next);
+    command("git", ["add", "--", ...VERSION_FILES]);
+    command("git", ["commit", "-m", `chore: release ${tag}`]);
+  } catch (error) {
+    for (const [file, contents] of originals) writeFileSync(resolve(ROOT, file), contents);
+    command("git", ["restore", "--staged", "--", ...VERSION_FILES]);
+    throw error;
   }
-
-  console.log(`Built + signed bundle: ${bundle.exe}`);
-
-  runOk("git add package.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json");
-  run(`git commit -m "chore: release v${next}"`);
-  run("git push");
-  run("git tag v" + next);
-  run(`git push origin v${next}`);
-
-  publishToReleases(next, bundle);
-  console.log(`Released v${next}. Installer + update.json published to ${RELEASE_REPO}.`);
+  command("git", ["tag", "-a", tag, "-m", `Quill ${tag}`]);
+  const sha = command("git", ["rev-parse", "HEAD"], true);
+  command("git", ["push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${tag}`]);
+  await waitForRelease(sha, tag);
+  console.log(`Published Quill ${tag}.\nhttps://github.com/${RELEASE_REPO}/releases/latest/download/${ASSET_NAME}`);
 }
 
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isMain) {
-  try {
-    main(process.argv);
-  } catch (e) {
-    console.error(e.message);
-    process.exit(1);
-  }
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main(process.argv).catch(error => { console.error(error.message); process.exitCode = 1; });
 }

@@ -40,13 +40,13 @@ Demo videos are in `public/`:
 
 ## Install
 
-Download the latest MSI from [releases](https://github.com/Elixir-Piloting/quill/releases):
+Download the [latest Windows installer](https://github.com/Elixir-Piloting/quill/releases/latest/download/Quill_x64-setup.exe):
 
 ```
-Quill_<version>_x64_en-US.msi
+Quill_x64-setup.exe
 ```
 
-Run the MSI — Quill starts automatically on login.
+Run the installer — Quill starts automatically on login. The download URL stays the same across releases.
 
 Requirements: **Windows 10+**, 64-bit.
 
@@ -54,7 +54,7 @@ Requirements: **Windows 10+**, 64-bit.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) 24+
 - [pnpm](https://pnpm.io/)
 - [Rust](https://www.rust-lang.org/tools/install)
 - [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (included on Windows 10+)
@@ -77,7 +77,27 @@ pnpm tauri dev
 pnpm tauri build
 ```
 
-Output is at `src-tauri/target/release/bundle/msi/Quill_<version>_x64_en-US.msi`.
+Output is at `src-tauri/target/release/bundle/nsis/Quill_<version>_x64-setup.exe`.
+
+### Release
+
+Commit and push your changes on `main`, then run:
+
+```bash
+pnpm release
+```
+
+This bumps the patch version in all four version files, commits it, and pushes an annotated tag together with `main`. GitHub Actions builds the Windows x64 NSIS installer, signs it with the updater key, and publishes the installer, signature, and `update.json`. The command waits for publication and pulls the updater manifest commit automatically.
+
+Use `pnpm release minor` or `pnpm release major` for larger version bumps. `pnpm run update` is an alias for the same release command.
+
+The published filename is always `Quill_x64-setup.exe`, so this link always downloads the latest release:
+
+https://github.com/Elixir-Piloting/quill/releases/latest/download/Quill_x64-setup.exe
+
+The updater reads the release's `update.json`; its binary URL stays pinned to the matching version and signature. CI also updates the legacy `main/update.json` endpoint for older installations. A rerun of an already published release preserves its original artifacts.
+
+The local release command needs an authenticated [GitHub CLI](https://cli.github.com/). GitHub Actions needs the repository secrets `TAURI_SIGNING_PRIVATE_KEY` (existing private key contents) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. These are configured once; normal releases require no local build or signing steps.
 
 ### Project structure
 

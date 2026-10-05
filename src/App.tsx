@@ -12,6 +12,7 @@ import Titlebar from "./components/Titlebar";
 import SettingsModal from "./components/SettingsModal";
 import MainPage from "./pages/MainPage";
 import UpdateDialog from "./components/UpdateDialog";
+import { useTheme } from "./hooks/useTheme";
 function App() {
   return (
     <MemoryRouter>
@@ -67,28 +68,7 @@ function AppShell() {
   const [paused, setPaused] = useState(false);
 
   // Theme (runs in all windows including popup)
-  const [theme, setTheme] = useState<"system" | "light" | "dark">(() => {
-    const stored = localStorage.getItem("quill-theme");
-    if (stored === "light" || stored === "dark" || stored === "system") return stored;
-    return "system";
-  });
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      if (theme === "light") root.classList.remove("dark");
-      else if (theme === "dark") root.classList.add("dark");
-      else if (mq.matches) root.classList.add("dark");
-      else root.classList.remove("dark");
-    };
-    apply();
-    localStorage.setItem("quill-theme", theme);
-    if (theme === "system") {
-      mq.addEventListener("change", apply);
-      return () => mq.removeEventListener("change", apply);
-    }
-  }, [theme]);
+  const [theme, setTheme] = useTheme();
 
   // Popup redirect
   try {

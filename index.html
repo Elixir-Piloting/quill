@@ -9,10 +9,9 @@
       (function() {
         try {
           var t = localStorage.getItem('quill-theme');
-          if (t === 'dark') { document.documentElement.classList.add('dark'); }
-          else if (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            document.documentElement.classList.add('dark');
-          }
+          var dark = t === 'dark' || (t !== 'light' && t !== 'dark' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.toggle('dark', dark);
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
         } catch(e) {}
       })();
     </script>
